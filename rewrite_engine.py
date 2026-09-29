@@ -196,14 +196,19 @@ def _format_sql(query: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def rewrite_query(query: str, analysis: dict) -> dict:
+def rewrite_query(
+    query: str,
+    analysis: dict,
+    allow_limit_injection: bool = True,
+) -> dict:
     """
     Automatically rewrite an inefficient SQL query into an optimized form.
 
     Parameters
     ----------
-    query    : str  — original SQL query
-    analysis : dict — output of analyzer.analyze_query()
+    query                 : str  — original SQL query
+    analysis              : dict — output of analyzer.analyze_query()
+    allow_limit_injection : bool — whether to inject LIMIT 100 on unbounded queries (changes cardinality)
 
     Returns
     -------
@@ -213,6 +218,8 @@ def rewrite_query(query: str, analysis: dict) -> dict:
         changes           : list[str] — human-readable list of transformations applied
         is_changed        : bool — whether any rewrite was applied
         rewrite_score_est : int  — rough estimate of score improvement from rewrites
+        validation        : dict — static and semantic validation result with trust badge
+        supported         : bool — whether the statement type is supported for rewriting
     """
     issue_codes   = {i["code"] for i in analysis.get("issues",   [])}
     warning_codes = {w["code"] for w in analysis.get("warnings", [])}
@@ -223,12 +230,15 @@ def rewrite_query(query: str, analysis: dict) -> dict:
 
     stmt_type = analysis.get("statement_type") or analysis.get("query_type", "SELECT")
     if stmt_type not in ("SELECT", "CTE", "UNION"):
+        from rewrite_validation import validate_rewrite_static
+        val = validate_rewrite_static(query, query, [])
         return {
             "original": _format_sql(query),
             "rewritten": _format_sql(query),
             "changes": [f"No automatic rewrite available for {stmt_type} statements (safe analysis only)."],
             "is_changed": False,
             "rewrite_score_est": 0,
+            "validation": val.to_dict(),
             "supported": False,
         }
 
@@ -261,13 +271,17 @@ def rewrite_query(query: str, analysis: dict) -> dict:
             changes.append(change)
 
     # ---- 5. Add LIMIT ----
-    if "MISSING_LIMIT" in all_codes and not re.search(r"\bLIMIT\b", current, re.IGNORECASE):
+    if allow_limit_injection and "MISSING_LIMIT" in all_codes and not re.search(r"\bLIMIT\b", current, re.IGNORECASE):
         current, change = _rewrite_add_limit(current, 100)
         changes.append(change)
 
     # ---- Format both original and rewritten ----
     formatted_original  = _format_sql(query)
     formatted_rewritten = _format_sql(current)
+
+    # ---- Static semantic validation ----
+    from rewrite_validation import validate_rewrite_static
+    validation = validate_rewrite_static(query, current, changes)
 
     # ---- Estimate score improvement from rewrites ----
     score_delta = 0
@@ -287,4 +301,6 @@ def rewrite_query(query: str, analysis: dict) -> dict:
         "changes":           changes,
         "is_changed":        len(changes) > 0,
         "rewrite_score_est": min(score_delta, 60),
+        "validation":        validation.to_dict(),
+        "supported":         True,
     }

@@ -1094,7 +1094,27 @@ with tab_advanced:
         st.markdown('<div class="section-header">✏️ Query Rewrite Engine</div>', unsafe_allow_html=True)
         st.caption("Automatically rewrites inefficient SQL patterns into optimized equivalents.")
 
-        rewrite = rewrite_query(adv_query, adv_analysis)
+        col_rw_opts, _ = st.columns([2, 1])
+        with col_rw_opts:
+            allow_limit = st.checkbox(
+                "Allow LIMIT injection (caps result set to 100 rows)",
+                value=True,
+                help="When enabled, injects LIMIT 100 on unbounded SELECT queries. Uncheck to maintain identical result cardinality.",
+                key="adv_allow_limit",
+            )
+
+        rewrite = rewrite_query(adv_query, adv_analysis, allow_limit_injection=allow_limit)
+
+        val = rewrite.get("validation", {})
+        val_level = val.get("level", "Verified equivalent")
+        val_color = val.get("badge_color", "#2ecc71")
+        val_msg = val.get("message", "")
+
+        st.markdown(
+            f'**Semantic Trust Level:** <span style="background:{val_color};color:white;padding:3px 10px;border-radius:12px;font-weight:600;font-size:0.85rem;">{val_level}</span> &nbsp; <small style="color:#aaa;">{val_msg}</small>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("")
 
         rw1, rw2 = st.columns(2)
         with rw1:
@@ -1118,6 +1138,20 @@ with tab_advanced:
                     f"⚡ Applying these rewrites could add approximately "
                     f"**+{rewrite['rewrite_score_est']} points** to the performance score."
                 )
+
+            # Live empirical multiset comparison on sample data
+            if engine is not None and is_safe_for_live:
+                if st.button("🧪 Validate Rewrite on Live Sample Data", key="btn_validate_data"):
+                    from rewrite_validation import validate_rewrite_data
+                    with st.spinner("Executing original and rewritten queries with row cap to verify multiset equivalence..."):
+                        data_val = validate_rewrite_data(engine, adv_query, rewrite["rewritten"], row_cap=100)
+                    st.markdown(
+                        f'**Empirical Data Validation:** <span style="background:{data_val.badge_color};color:white;padding:3px 10px;border-radius:12px;font-weight:600;font-size:0.85rem;">{data_val.level}</span>',
+                        unsafe_allow_html=True,
+                    )
+                    st.info(data_val.message)
+                    for detail in data_val.details:
+                        st.caption(f"• {detail}")
         else:
             st.success("✅ No automatic rewrites needed — query is already well-structured.")
 
