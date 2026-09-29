@@ -33,6 +33,13 @@ from utils.helpers import (
     history_record,
 )
 
+from db.connection import (
+    DBConfig,
+    build_engine,
+    test_connection as run_test_connection,
+    close_engine,
+)
+
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
@@ -50,6 +57,10 @@ if "history" not in st.session_state:
     st.session_state.history: list[dict] = []
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
+if "db_engine" not in st.session_state:
+    st.session_state["db_engine"] = None
+if "db_config" not in st.session_state:
+    st.session_state["db_config"] = None
 
 # ---------------------------------------------------------------------------
 # Custom CSS
@@ -138,7 +149,69 @@ st.markdown(
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("##  Tools")
+    st.markdown("## 🛠️ Tools")
+
+    # Database connection status badge
+    if st.session_state.get("db_engine") is not None and st.session_state.get("db_config"):
+        connected_db = st.session_state["db_config"].get("database") or "MySQL"
+        st.success(f"🟢 **Connected:** `{connected_db}`", icon="✅")
+    else:
+        st.info("⚪ **Mode:** Offline (simulated)", icon="ℹ️")
+
+    with st.expander("🔌 MySQL 8.x Connection", expanded=st.session_state.get("db_engine") is None):
+        cfg_current = st.session_state.get("db_config") or {}
+        db_host = st.text_input("Host", value=cfg_current.get("host", "localhost"), key="sidebar_db_host")
+        db_port = st.number_input("Port", value=int(cfg_current.get("port", 3306)), min_value=1, max_value=65535, step=1, key="sidebar_db_port")
+        db_user = st.text_input("User", value=cfg_current.get("user", "root"), key="sidebar_db_user")
+        db_pass = st.text_input("Password", type="password", key="sidebar_db_pass", help="Never stored in session state after connection")
+        db_name = st.text_input("Database", value=cfg_current.get("database", "shop_db"), key="sidebar_db_name")
+
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("🧪 Test", use_container_width=True):
+                test_cfg = DBConfig(
+                    host=db_host.strip(),
+                    port=int(db_port),
+                    user=db_user.strip(),
+                    password=db_pass,
+                    database=db_name.strip(),
+                )
+                ok, msg = run_test_connection(test_cfg)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+
+        with btn_col2:
+            if st.session_state.get("db_engine") is None:
+                if st.button("🔗 Connect", type="primary", use_container_width=True):
+                    connect_cfg = DBConfig(
+                        host=db_host.strip(),
+                        port=int(db_port),
+                        user=db_user.strip(),
+                        password=db_pass,
+                        database=db_name.strip(),
+                    )
+                    ok, msg = run_test_connection(connect_cfg)
+                    if ok:
+                        try:
+                            engine = build_engine(connect_cfg)
+                            st.session_state["db_engine"] = engine
+                            st.session_state["db_config"] = connect_cfg.to_display_dict()
+                            st.success(f"Connected to {connect_cfg.database or 'MySQL'}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to initialize engine: {e}")
+                    else:
+                        st.error(msg)
+            else:
+                if st.button("🔌 Disconnect", use_container_width=True):
+                    close_engine(st.session_state.get("db_engine"))
+                    st.session_state["db_engine"] = None
+                    st.session_state["db_config"] = None
+                    st.info("Disconnected from database.")
+                    st.rerun()
+
     st.markdown("---")
 
     # Sample query picker

@@ -44,7 +44,7 @@ The following table reflects the actual state of the codebase today:
 | **MySQL Best Practices** | **Yes** | [`recommendations.py`](recommendations.py) | 12 curated MySQL performance guidelines displayed in Tab 4. |
 | **Architecture Diagram** | **Yes** | [`app.py`](app.py) | System workflow visualizer embedded in the Streamlit UI. |
 | **Report Export** | **Yes** | [`utils/helpers.py`](utils/helpers.py) | Exports query analysis and recommendations as JSON, CSV, or formatted plain text. |
-| **Live Database Connection** | **No** | [`db_connection.py`](db_connection.py) | A dormant 10-line file with hardcoded placeholder credentials; **never imported or invoked by the application**. |
+| **Live Database Connection** | **Yes** | [`db/connection.py`](db/connection.py) | Connect to local or remote MySQL 8.x instances using SQLAlchemy + PyMySQL with connection pooling and password masking. |
 
 ---
 
@@ -191,7 +191,15 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the Streamlit dashboard
+### 4. (Optional) Configure a Read-Only MySQL User
+To safely connect to a live database without risk of data modification or unwanted DDL execution, configure a read-only user:
+```sql
+CREATE USER 'optimizer_ro'@'%' IDENTIFIED BY 'StrongPasswordHere!';
+GRANT SELECT ON shop_db.* TO 'optimizer_ro'@'%';
+FLUSH PRIVILEGES;
+```
+
+### 5. Run the Streamlit dashboard
 ```bash
 streamlit run app.py
 ```
@@ -204,12 +212,10 @@ Open your browser and navigate to **http://localhost:8501**.
 ### Active Technologies
 - **[Python 3.11+](https://www.python.org/):** Core application language.
 - **[Streamlit](https://streamlit.io/):** Interactive web dashboard framework.
+- **[SQLAlchemy 2.x](https://www.sqlalchemy.org/) & [PyMySQL](https://github.com/PyMySQL/PyMySQL):** Database connection management and connection pooling.
 - **[Plotly](https://plotly.com/):** Interactive data visualizations (Score Gauge, Comparison Bar Charts).
 - **[sqlparse](https://github.com/andialbrecht/sqlparse):** Non-validating SQL parser and tokenization library.
 - **[Pandas](https://pandas.pydata.org/):** Query history management and CSV dataset loading.
-
-### Dependencies in `requirements.txt`
-The file [`requirements.txt`](requirements.txt) also lists `mysql-connector-python`, `sqlalchemy`, and `pymysql`. These are currently **dormant** and reserved for the upcoming MySQL database integration milestones.
 
 ---
 
@@ -226,7 +232,9 @@ The file [`requirements.txt`](requirements.txt) also lists `mysql-connector-pyth
 ├── execution_plan.py        # Simulated execution plan tree generator (MySQL 8.x EXPLAIN model)
 ├── simulator.py             # Synthetic index impact metrics simulator (labeled estimates)
 ├── rewrite_engine.py        # Regex-based SQL query rewriter (5 transformations)
-├── db_connection.py         # Dormant MySQL connector (not imported; pending Milestone 1)
+├── db/                      # Live database connectivity package
+│   ├── __init__.py
+│   └── connection.py        # DBConfig, SQLAlchemy engine builder & categorized error handling
 ├── requirements.txt         # Project dependencies
 ├── README.md                # Project documentation
 ├── data/
