@@ -191,7 +191,22 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. (Optional) Configure a Read-Only MySQL User
+### 4. (Optional) Create & Seed Sample Database (`shop_db`)
+To run benchmarks with real tables, generate the reproducible 100k+ row benchmark database:
+```bash
+# Set connection environment variables if needed (defaults to localhost:3306, user root, empty password)
+export DB_HOST=localhost
+export DB_USER=root
+export DB_PASSWORD=your_password
+
+# Run the seed script (creates 50k customers, 2k products, 200k orders, 500k order items)
+python scripts/seed_db.py --reset
+
+# For a quick smoke test on lower-resource machines, use a scale factor:
+python scripts/seed_db.py --reset --scale 0.05
+```
+
+### 5. (Optional) Configure a Read-Only MySQL User
 To safely connect to a live database without risk of data modification or unwanted DDL execution, configure a read-only user:
 ```sql
 CREATE USER 'optimizer_ro'@'%' IDENTIFIED BY 'StrongPasswordHere!';
@@ -199,7 +214,7 @@ GRANT SELECT ON shop_db.* TO 'optimizer_ro'@'%';
 FLUSH PRIVILEGES;
 ```
 
-### 5. Run the Streamlit dashboard
+### 6. Run the Streamlit dashboard
 ```bash
 streamlit run app.py
 ```
@@ -212,8 +227,8 @@ Open your browser and navigate to **http://localhost:8501**.
 ### Active Technologies
 - **[Python 3.11+](https://www.python.org/):** Core application language.
 - **[Streamlit](https://streamlit.io/):** Interactive web dashboard framework.
-- **[SQLAlchemy 2.x](https://www.sqlalchemy.org/) & [PyMySQL](https://github.com/PyMySQL/PyMySQL):** Database connection management and connection pooling.
-- **[Plotly](https://plotly.com/):** Interactive data visualizations (Score Gauge, Comparison Bar Charts).
+- **[SQLAlchemy 2.x](https://www.sqlalchemy.org/) & [PyMySQL](https://github.com/PyMySQL/PyMySQL):** Database connection management, EXPLAIN execution, and latency benchmarking.
+- **[Plotly](https://plotly.com/):** Interactive data visualizations (Score Gauge, Comparison Bar Charts, Tree Visualizer).
 - **[sqlparse](https://github.com/andialbrecht/sqlparse):** Non-validating SQL parser and tokenization library.
 - **[Pandas](https://pandas.pydata.org/):** Query history management and CSV dataset loading.
 
@@ -225,23 +240,35 @@ Open your browser and navigate to **http://localhost:8501**.
 .
 ├── app.py                   # Main Streamlit dashboard (5 tabs, UI components, charts)
 ├── config.py                # Dialect abstraction & settings (default: MySQL 8.x)
-├── analyzer.py              # Pattern detection engine (10 anti-pattern checks)
+├── analyzer.py              # Pattern detection engine (10 anti-pattern checks + schema validation)
 ├── scoring.py               # Deterministic scoring engine (16 rules, 0-100 scale)
 ├── optimizer.py             # Rule-based optimization suggestions & insight templates
-├── recommendations.py       # MySQL 8.x CREATE INDEX DDL generator & best practices list
+├── recommendations.py       # MySQL 8.x CREATE INDEX DDL generator & leftmost-prefix deduplication
 ├── execution_plan.py        # Simulated execution plan tree generator (MySQL 8.x EXPLAIN model)
 ├── simulator.py             # Synthetic index impact metrics simulator (labeled estimates)
 ├── rewrite_engine.py        # Regex-based SQL query rewriter (5 transformations)
-├── db/                      # Live database connectivity package
+├── db/                      # Live database integration package
 │   ├── __init__.py
-│   └── connection.py        # DBConfig, SQLAlchemy engine builder & categorized error handling
-├── requirements.txt         # Project dependencies
-├── README.md                # Project documentation
+│   ├── connection.py        # DBConfig, SQLAlchemy engine builder & categorized error handling
+│   ├── explain.py           # Real EXPLAIN JSON parser, safety validator, and ANALYZE runner
+│   ├── schema.py            # Information schema introspection (tables, columns, indexes)
+│   └── benchmark.py         # Real query execution benchmarking (min, median, p95)
+├── sql/
+│   └── schema.sql           # Realistic shop_db DDL (intentionally unindexed for demo impact)
+├── scripts/
+│   └── seed_db.py           # Reproducible data seeder (50k customers, 200k orders, 500k items)
 ├── data/
-│   └── sample_queries.csv   # 25 annotated test queries
-└── utils/
-    ├── __init__.py          # Package initialization
-    └── helpers.py           # SQL formatting, badge helpers, and export builders (JSON/CSV/TXT)
+│   ├── sample_queries.csv   # 25 annotated general queries
+│   └── sample_queries_shop.csv # 20 realistic shop_db benchmark queries
+├── tests/                   # Pytest automated test suite
+│   ├── test_connection.py
+│   ├── test_explain.py
+│   ├── test_benchmark.py
+│   ├── test_schema.py
+│   ├── test_recommendations.py
+│   └── test_mysql_alignment.py
+├── requirements.txt         # Project dependencies
+└── README.md                # Project documentation
 ```
 
 ---
@@ -249,3 +276,4 @@ Open your browser and navigate to **http://localhost:8501**.
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+

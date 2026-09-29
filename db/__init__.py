@@ -1,12 +1,18 @@
-"""Database connectivity, schema introspection, and EXPLAIN module for MySQL 8.x."""
+"""Database connectivity, schema introspection, EXPLAIN, and benchmarking for MySQL 8.x."""
 
-from db.connection import DBConfig, build_engine, test_connection, close_engine
-from db.explain import run_explain, parse_mysql_explain_json, validate_explainable_query
+from db.benchmark import (
+    BenchmarkComparison,
+    BenchmarkMetrics,
+    benchmark_query,
+    compare_queries,
+)
+from db.connection import DBConfig, build_engine, close_engine, test_connection
+from db.explain import parse_mysql_explain_json, run_explain, validate_explainable_query
 from db.schema import (
     ColumnInfo,
     IndexInfo,
-    TableInfo,
     SchemaInfo,
+    TableInfo,
     load_schema_from_db,
 )
 
@@ -23,4 +29,8 @@ __all__ = [
     "TableInfo",
     "SchemaInfo",
     "load_schema_from_db",
+    "benchmark_query",
+    "compare_queries",
+    "BenchmarkMetrics",
+    "BenchmarkComparison",
 ]

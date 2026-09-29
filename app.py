@@ -41,6 +41,7 @@ from db.connection import (
 )
 from db.explain import run_explain
 from db.schema import SchemaInfo, load_schema_from_db
+from db.benchmark import compare_queries, benchmark_query
 
 
 @st.cache_data(ttl=600)
@@ -1059,14 +1060,103 @@ with tab_advanced:
         else:
             st.success("✅ No automatic rewrites needed — query is already well-structured.")
 
+        # ===================================================================
+        # SECTION 4 — Live Query Execution Benchmarking
+        # ===================================================================
+        st.markdown("---")
+        st.markdown('<div class="section-header">⏱️ Live Query Execution Benchmarking</div>', unsafe_allow_html=True)
+        st.caption("Measure actual wall-clock execution times (min, median, p95, mean) on your live MySQL database.")
+
+        if engine is None:
+            st.info("⚪ **Offline Mode:** Connect to a MySQL database in the sidebar to benchmark queries live.", icon="ℹ️")
+        else:
+            default_compare_sql = rewrite["rewritten"] if rewrite.get("is_changed") else adv_query
+            bc_col1, bc_col2 = st.columns([1, 1])
+            with bc_col1:
+                bm_runs = st.slider("Timed Runs", min_value=3, max_value=15, value=5, step=1, key="bm_runs")
+            with bc_col2:
+                bm_warmup = st.slider("Warmup Runs", min_value=0, max_value=3, value=1, step=1, key="bm_warmup", help="Populates InnoDB buffer pool pages before measuring steady-state performance.")
+
+            compare_input = st.text_area(
+                "Query to compare against original (e.g. rewritten query)",
+                value=default_compare_sql,
+                height=120,
+                key="bm_compare_input",
+            )
+
+            if st.button("🚀 Run Live Benchmark", type="primary", use_container_width=True):
+                with st.spinner(f"Running benchmark ({bm_warmup} warmup + {bm_runs} iterations on live MySQL)..."):
+                    comp_res = compare_queries(engine, adv_query, compare_input, runs=bm_runs, warmup=bm_warmup)
+
+                if comp_res.original.success and comp_res.rewritten.success:
+                    bk1, bk2, bk3, bk4 = st.columns(4)
+                    with bk1:
+                        st.markdown(
+                            f'<div class="score-card"><div class="score-number" style="color:#e74c3c;font-size:1.6rem">'
+                            f'{comp_res.original.median_ms:.2f} ms</div><div class="score-label">ORIGINAL (MEDIAN)</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with bk2:
+                        st.markdown(
+                            f'<div class="score-card"><div class="score-number" style="color:#2ecc71;font-size:1.6rem">'
+                            f'{comp_res.rewritten.median_ms:.2f} ms</div><div class="score-label">REWRITTEN (MEDIAN)</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with bk3:
+                        speed_color = "#2ecc71" if comp_res.speedup_factor >= 1.0 else "#e74c3c"
+                        st.markdown(
+                            f'<div class="score-card"><div class="score-number" style="color:{speed_color};font-size:1.6rem">'
+                            f'{comp_res.speedup_factor:.2f}×</div><div class="score-label">MEASURED SPEEDUP</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with bk4:
+                        row_status = "✅ Match" if comp_res.row_counts_match else "⚠️ Mismatch"
+                        st.markdown(
+                            f'<div class="score-card"><div class="score-number" style="color:#a8b2d8;font-size:1.4rem">'
+                            f'{row_status}</div><div class="score-label">{comp_res.original.rows_returned} vs {comp_res.rewritten.rows_returned} ROWS</div></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    if comp_res.warning:
+                        st.warning(comp_res.warning)
+
+                    # Comparison Bar Chart
+                    fig_bm = go.Figure()
+                    metrics_names = ["Min Latency", "Median Latency", "95th Percentile (p95)", "Mean Latency"]
+                    orig_vals = [comp_res.original.min_ms, comp_res.original.median_ms, comp_res.original.p95_ms, comp_res.original.mean_ms]
+                    rew_vals = [comp_res.rewritten.min_ms, comp_res.rewritten.median_ms, comp_res.rewritten.p95_ms, comp_res.rewritten.mean_ms]
+
+                    fig_bm.add_trace(go.Bar(name="Original Query", x=metrics_names, y=orig_vals, marker_color="#e74c3c"))
+                    fig_bm.add_trace(go.Bar(name="Rewritten Query", x=metrics_names, y=rew_vals, marker_color="#2ecc71"))
+                    fig_bm.update_layout(
+                        title="Query Latency Comparison (Milliseconds - Lower is Better)",
+                        barmode="group",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font_color="white",
+                        yaxis=dict(title="Latency (ms)", gridcolor="#333"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    )
+                    st.plotly_chart(fig_bm, use_container_width=True)
+
+                    st.info(f"ℹ️ **Buffer Pool Caveat:** {comp_res.buffer_cache_notice}")
+                else:
+                    err_msg = comp_res.original.error or comp_res.rewritten.error or "Benchmark failed."
+                    st.error(f"Benchmark error: {err_msg}")
+
+            st.caption(
+                "📌 **Index Testing Note:** In MySQL, DDL statements (`CREATE INDEX`) cause implicit commits and cannot be run inside a temporary rollback transaction. "
+                "To benchmark index recommendations, apply the recommended DDL on a staging database."
+            )
+
 # ---------------------------------------------------------------------------
 # Footer
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.markdown(
-    "<div style='text-align:center;color:#555;font-size:0.8rem'>"
-    "AI-Powered SQL Query Optimization & Index Recommendation Engine &nbsp;|&nbsp; "
-    "Built with Streamlit + Plotly + sqlparse &nbsp;|&nbsp; 18 Features"
+    "<div style='text-align:center;color:#666;font-size:0.8rem'>"
+    "Rule-Based SQL Query Analyzer & Index Recommender &nbsp;|&nbsp; "
+    "Target: MySQL 8.x &nbsp;|&nbsp; Streamlit + Plotly + SQLAlchemy + PyMySQL"
     "</div>",
     unsafe_allow_html=True,
 )
