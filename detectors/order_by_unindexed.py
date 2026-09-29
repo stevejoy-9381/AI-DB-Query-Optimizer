@@ -5,11 +5,12 @@ Detects ORDER BY RAND() and ORDER BY on unindexed columns when schema is availab
 from __future__ import annotations
 
 from typing import Optional
+
 from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class OrderByRandDetector(BaseDetector):
@@ -24,7 +25,7 @@ class OrderByRandDetector(BaseDetector):
         features: QueryFeatures,
         schema: Optional[SchemaInfo] = None,
     ) -> list[Finding]:
-        findings = []
+        findings: list[Finding] = []
         if not features.raw_ast:
             return findings
 
@@ -69,7 +70,7 @@ class UnindexedOrderByDetector(BaseDetector):
         features: QueryFeatures,
         schema: Optional[SchemaInfo] = None,
     ) -> list[Finding]:
-        findings = []
+        findings: list[Finding] = []
         if not schema or not features.raw_ast or not features.order_by_cols:
             return findings
 

@@ -5,11 +5,12 @@ Detects COUNT(DISTINCT ...) and explains COUNT(col) vs COUNT(*) behavior.
 from __future__ import annotations
 
 from typing import Optional
+
 from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class CountDistinctDetector(BaseDetector):
@@ -24,7 +25,7 @@ class CountDistinctDetector(BaseDetector):
         features: QueryFeatures,
         schema: Optional[SchemaInfo] = None,
     ) -> list[Finding]:
-        findings = []
+        findings: list[Finding] = []
         if not features.raw_ast:
             return findings
 

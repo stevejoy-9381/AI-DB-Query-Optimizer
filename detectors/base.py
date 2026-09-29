@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from query_model import QueryFeatures
     from db.schema import SchemaInfo
+    from query_model import QueryFeatures
 
 
 @dataclass

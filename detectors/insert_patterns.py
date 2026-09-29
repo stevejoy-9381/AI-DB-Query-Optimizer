@@ -7,9 +7,10 @@ Detectors for INSERT statements:
 from __future__ import annotations
 
 from typing import Optional
+
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class InsertSingleRowDetector(BaseDetector):

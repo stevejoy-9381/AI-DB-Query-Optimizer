@@ -5,11 +5,10 @@ Detects leading wildcards in LIKE patterns ('%term' or '_term').
 from __future__ import annotations
 
 from typing import Optional
-from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class LeadingWildcardDetector(BaseDetector):

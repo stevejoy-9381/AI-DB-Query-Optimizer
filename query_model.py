@@ -8,7 +8,6 @@ from typing import Any
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +228,7 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
                 features.wildcard_likes.append(col_name)
 
         # Detect comparison predicates and function wrapping
-        for comp_node in where_clause.find_all((exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.In)):
+        for comp_node in where_clause.find_all(exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.In):
             left = comp_node.left if hasattr(comp_node, "left") else comp_node.this
             is_func = False
             func_name = None
@@ -305,7 +304,7 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
             ))
 
     # 11. Aggregates (COUNT, SUM, AVG, MAX, MIN)
-    for func in ast.find_all((exp.Count, exp.Sum, exp.Avg, exp.Max, exp.Min)):
+    for func in ast.find_all(exp.Count, exp.Sum, exp.Avg, exp.Max, exp.Min):
         features.aggregates.append(func.key.upper())
 
     return features

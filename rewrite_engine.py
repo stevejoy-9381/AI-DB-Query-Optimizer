@@ -7,17 +7,18 @@ All rewrites operate on sqlglot AST nodes through an extensible RewriteRule regi
 
 from __future__ import annotations
 
-import re
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 import sqlglot
 from sqlglot import exp
 
-from query_model import QueryFeatures, extract_query_features
-from rewrite_validation import validate_rewrite_static, EquivalenceLevel
 from db.schema import SchemaInfo
+from query_model import QueryFeatures, extract_query_features
+from rewrite_validation import EquivalenceLevel, validate_rewrite_static
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Default Column Hint Library (Used only when DB schema is not connected)
@@ -287,7 +288,8 @@ class FunctionOnColumnRule(RewriteRule):
             return False
         for eq in where_node.find_all(exp.EQ):
             if isinstance(eq.this, (exp.Upper, exp.Lower, exp.Anonymous, exp.Func)):
-                func_name = (getattr(eq.this, "key", None) or getattr(eq.this, "name", "")).upper()
+                raw_name = getattr(eq.this, "key", None) or getattr(eq.this, "name", "") or ""
+                func_name = str(raw_name).upper()
                 if func_name in ("UPPER", "LOWER") and isinstance(eq.expression, exp.Literal):
                     return True
         return False
@@ -298,7 +300,8 @@ class FunctionOnColumnRule(RewriteRule):
         if where_node:
             for eq in list(where_node.find_all(exp.EQ)):
                 if isinstance(eq.this, (exp.Upper, exp.Lower, exp.Anonymous, exp.Func)):
-                    func_name = (getattr(eq.this, "key", None) or getattr(eq.this, "name", "")).upper()
+                    raw_name = getattr(eq.this, "key", None) or getattr(eq.this, "name", "") or ""
+                    func_name = str(raw_name).upper()
                     col = eq.this.find(exp.Column)
                     if func_name in ("UPPER", "LOWER") and col and isinstance(eq.expression, exp.Literal):
                         val_str = str(eq.expression.this).strip("'\"")

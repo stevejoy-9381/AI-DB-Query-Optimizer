@@ -5,11 +5,12 @@ Detects HAVING filters that do not contain aggregate functions and could be push
 from __future__ import annotations
 
 from typing import Optional
+
 from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class HavingAsWhereDetector(BaseDetector):
@@ -28,7 +29,7 @@ class HavingAsWhereDetector(BaseDetector):
         features: QueryFeatures,
         schema: Optional[SchemaInfo] = None,
     ) -> list[Finding]:
-        findings = []
+        findings: list[Finding] = []
         if not features.raw_ast:
             return findings
 
@@ -40,7 +41,7 @@ class HavingAsWhereDetector(BaseDetector):
         for cond in having_node.flatten():
             # If condition has a comparison but no aggregate function
             if isinstance(cond, (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE)):
-                has_agg = bool(cond.find(self.AGGREGATE_FUNCS))
+                has_agg = bool(cond.find(*self.AGGREGATE_FUNCS))
                 if not has_agg:
                     findings.append(Finding(
                         code=self.code,

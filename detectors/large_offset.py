@@ -5,11 +5,10 @@ Detects large OFFSET pagination (e.g. OFFSET 1000 or LIMIT 1000, 20) which waste
 from __future__ import annotations
 
 from typing import Optional
-from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class LargeOffsetDetector(BaseDetector):

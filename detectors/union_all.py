@@ -5,11 +5,12 @@ Detects UNION statements where UNION ALL might be sufficient to avoid temporary 
 from __future__ import annotations
 
 from typing import Optional
+
 from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class UnionInsteadOfUnionAllDetector(BaseDetector):
@@ -24,7 +25,7 @@ class UnionInsteadOfUnionAllDetector(BaseDetector):
         features: QueryFeatures,
         schema: Optional[SchemaInfo] = None,
     ) -> list[Finding]:
-        findings = []
+        findings: list[Finding] = []
         if not features.raw_ast:
             return findings
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import csv
 import math
-import os
 import sys
 from pathlib import Path
 
@@ -17,9 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analyzer import analyze_query
-from scoring import compute_score
-from db.connection import DBConfig, build_engine
 from db.benchmark import benchmark_query
+from db.connection import DBConfig, build_engine
+from scoring import compute_score
 
 
 def calculate_pearson_r(x_vals: list[float], y_vals: list[float]) -> float:
@@ -66,7 +65,7 @@ def main() -> None:
     engine = None
     try:
         engine = build_engine(config)
-        with engine.connect() as conn:
+        with engine.connect() as _conn:
             pass
         print(f"Connected to live MySQL database `{config.database}` at {config.host}:{config.port}.")
     except Exception as e:

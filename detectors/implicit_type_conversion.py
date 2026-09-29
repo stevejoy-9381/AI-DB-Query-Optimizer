@@ -5,11 +5,12 @@ Detects implicit type conversions in WHERE conditions when schema metadata is kn
 from __future__ import annotations
 
 from typing import Optional
+
 from sqlglot import exp
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
 
 
 class ImplicitTypeConversionDetector(BaseDetector):
@@ -24,7 +25,7 @@ class ImplicitTypeConversionDetector(BaseDetector):
         features: QueryFeatures,
         schema: Optional[SchemaInfo] = None,
     ) -> list[Finding]:
-        findings = []
+        findings: list[Finding] = []
         if not schema or not features.raw_ast:
             return findings
 
@@ -59,7 +60,6 @@ class ImplicitTypeConversionDetector(BaseDetector):
                     if col_info:
                         col_type = col_info.data_type.upper()
                         is_string_col = any(t in col_type for t in ("VARCHAR", "CHAR", "TEXT", "ENUM"))
-                        is_num_col = any(t in col_type for t in ("INT", "BIGINT", "TINYINT", "SMALLINT", "DECIMAL", "FLOAT", "DOUBLE"))
 
                         if is_string_col and literal_node.is_number:
                             findings.append(Finding(

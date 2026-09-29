@@ -4,12 +4,10 @@ Verifies format normalization, line-by-line diff alignment, change statistics,
 and HTML rendering.
 """
 
-import pytest
 from utils.diff import (
     format_sqlglot_pretty,
     generate_side_by_side_diff,
     render_diff_html,
-    SideBySideDiff,
 )
 
 
@@ -30,7 +28,7 @@ def test_diff_identical_queries():
     assert diff.lines_removed == 0
     assert diff.lines_modified == 0
     assert len(diff.left_lines) == len(diff.right_lines)
-    assert all(l.tag == "equal" for l in diff.left_lines)
+    assert all(line.tag == "equal" for line in diff.left_lines)
     assert all(r.tag == "equal" for r in diff.right_lines)
 
 
@@ -42,7 +40,7 @@ def test_diff_with_modifications():
     assert diff.has_changes is True
     assert len(diff.left_lines) == len(diff.right_lines)
     # At least one line modified or replaced
-    tags = {l.tag for l in diff.left_lines} | {r.tag for r in diff.right_lines}
+    tags = {line.tag for line in diff.left_lines} | {r.tag for r in diff.right_lines}
     assert ("replace" in tags or "delete" in tags or "insert" in tags)
 
 

@@ -7,36 +7,34 @@ from __future__ import annotations
 
 from typing import Optional
 
+from db.schema import SchemaInfo
 from detectors.base import BaseDetector, Finding
 from detectors.correlated_subquery import CorrelatedSubqueryDetector
-from detectors.or_different_columns import OrDifferentColumnsDetector
-from detectors.implicit_type_conversion import ImplicitTypeConversionDetector
-from detectors.not_in_subquery import NotInSubqueryDetector
-from detectors.order_by_unindexed import OrderByRandDetector, UnindexedOrderByDetector
-from detectors.large_offset import LargeOffsetDetector
-from detectors.missing_join_condition import MissingJoinConditionDetector
-from detectors.non_sargable_arithmetic import NonSargableArithmeticDetector
-from detectors.having_as_where import HavingAsWhereDetector
 from detectors.count_distinct import CountDistinctDetector
-from detectors.leading_wildcard import LeadingWildcardDetector
-from detectors.union_all import UnionInsteadOfUnionAllDetector
-from detectors.update_delete_where import (
-    UpdateWithoutWhereDetector,
-    DeleteWithoutWhereDetector,
-    UpdateDeleteUnindexedWhereDetector,
-)
-from detectors.insert_patterns import (
-    InsertSingleRowDetector,
-    InsertSelectUnboundedDetector,
-)
 from detectors.cte_window_patterns import (
     CteMultiplyReferencedDetector,
     WindowWithoutPartitionDetector,
 )
-
+from detectors.having_as_where import HavingAsWhereDetector
+from detectors.implicit_type_conversion import ImplicitTypeConversionDetector
+from detectors.insert_patterns import (
+    InsertSelectUnboundedDetector,
+    InsertSingleRowDetector,
+)
+from detectors.large_offset import LargeOffsetDetector
+from detectors.leading_wildcard import LeadingWildcardDetector
+from detectors.missing_join_condition import MissingJoinConditionDetector
+from detectors.non_sargable_arithmetic import NonSargableArithmeticDetector
+from detectors.not_in_subquery import NotInSubqueryDetector
+from detectors.or_different_columns import OrDifferentColumnsDetector
+from detectors.order_by_unindexed import OrderByRandDetector, UnindexedOrderByDetector
+from detectors.union_all import UnionInsteadOfUnionAllDetector
+from detectors.update_delete_where import (
+    DeleteWithoutWhereDetector,
+    UpdateDeleteUnindexedWhereDetector,
+    UpdateWithoutWhereDetector,
+)
 from query_model import QueryFeatures
-from db.schema import SchemaInfo
-
 
 DETECTOR_REGISTRY: list[BaseDetector] = [
     CorrelatedSubqueryDetector(),
