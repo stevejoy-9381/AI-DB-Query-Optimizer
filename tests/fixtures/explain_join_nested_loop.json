@@ -1,0 +1,61 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost": "55.20"
+    },
+    "nested_loop": [
+      {
+        "table": {
+          "table_name": "orders",
+          "access_type": "ALL",
+          "rows_examined_per_scan": 50,
+          "rows_produced_per_join": 50,
+          "filtered": "100.00",
+          "cost_info": {
+            "read_cost": "5.00",
+            "eval_cost": "5.00",
+            "prefix_cost": "10.00",
+            "data_read_per_join": "8K"
+          },
+          "used_columns": [
+            "id",
+            "customer_id",
+            "total_amount"
+          ]
+        }
+      },
+      {
+        "table": {
+          "table_name": "customers",
+          "access_type": "eq_ref",
+          "possible_keys": [
+            "PRIMARY"
+          ],
+          "key": "PRIMARY",
+          "used_key_parts": [
+            "id"
+          ],
+          "key_length": "4",
+          "ref": [
+            "shop_db.orders.customer_id"
+          ],
+          "rows_examined_per_scan": 1,
+          "rows_produced_per_join": 50,
+          "filtered": "100.00",
+          "cost_info": {
+            "read_cost": "40.20",
+            "eval_cost": "5.00",
+            "prefix_cost": "55.20",
+            "data_read_per_join": "12K"
+          },
+          "used_columns": [
+            "id",
+            "name",
+            "email"
+          ]
+        }
+      }
+    ]
+  }
+}

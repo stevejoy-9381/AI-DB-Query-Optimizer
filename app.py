@@ -39,6 +39,7 @@ from db.connection import (
     test_connection as run_test_connection,
     close_engine,
 )
+from db.explain import run_explain
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -680,10 +681,59 @@ with tab_advanced:
         # SECTION 1 — Execution Plan Visualizer
         # ===================================================================
         st.markdown('<div class="section-header">📋 Query Execution Plan Visualizer</div>', unsafe_allow_html=True)
-        st.caption("Simulates the internal execution plan a MySQL 8.x query optimizer would generate for this query (access types: ALL, index, range, ref; Extra: Using where, Using index, Using filesort).")
 
-        plan_root = generate_execution_plan(adv_query, adv_analysis)
-        summary   = plan_summary(plan_root)
+        engine = st.session_state.get("db_engine")
+        is_connected = engine is not None
+        explain_warnings: list[str] = []
+        raw_analyze_output: str | None = None
+        raw_explain_json: dict | None = None
+        is_real_plan = False
+
+        if is_connected:
+            col_plan_mode, col_plan_opt = st.columns([3, 2])
+            with col_plan_mode:
+                plan_choice = st.radio(
+                    "Execution Plan Source",
+                    ["⚡ Real MySQL EXPLAIN (Live DB)", "🎲 Simulated Plan (Heuristic)"],
+                    horizontal=True,
+                    key="adv_plan_choice",
+                )
+            with col_plan_opt:
+                run_analyze = st.checkbox(
+                    "Run EXPLAIN ANALYZE (Executes query; MySQL 8.0.18+)",
+                    value=False,
+                    help="Executes query in a read-only transaction with a 5000ms safety timeout.",
+                    key="adv_run_analyze",
+                )
+
+            if "Real" in plan_choice:
+                with st.spinner("Executing EXPLAIN FORMAT=JSON on MySQL..."):
+                    explain_res = run_explain(engine, adv_query, analyze=run_analyze)
+
+                if explain_res.get("success"):
+                    is_real_plan = True
+                    plan_root = explain_res["plan_tree"]
+                    explain_warnings = explain_res.get("warnings", [])
+                    raw_analyze_output = explain_res.get("raw_analyze_text")
+                    raw_explain_json = explain_res.get("raw_json")
+                    st.success(f"🟢 **Live Database Plan:** Real MySQL 8.x EXPLAIN output (Server: `{explain_res.get('mysql_version')}`)", icon="✅")
+                else:
+                    st.warning(f"⚠️ **Real EXPLAIN Notice:** {explain_res.get('error')} — Falling back to simulated plan.")
+                    plan_root = generate_execution_plan(adv_query, adv_analysis)
+                    st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (Fallback)", icon="ℹ️")
+            else:
+                plan_root = generate_execution_plan(adv_query, adv_analysis)
+                st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (User Selected)", icon="ℹ️")
+        else:
+            plan_root = generate_execution_plan(adv_query, adv_analysis)
+            st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (Connect to MySQL in sidebar for real EXPLAIN)", icon="ℹ️")
+
+        if explain_warnings:
+            st.markdown("##### ⚠️ Live Execution Plan Optimizer Findings")
+            for w in explain_warnings:
+                st.warning(f"• {w}")
+
+        summary = plan_summary(plan_root)
 
         # KPI row for plan
         pc1, pc2, pc3, pc4 = st.columns(4)
@@ -691,21 +741,21 @@ with tab_advanced:
             color = cost_color(summary["cost_category"])
             st.markdown(
                 f'<div class="score-card"><div class="score-number" style="color:{color};font-size:1.6rem">'
-                f'{summary["cost_category"]}</div><div class="score-label">PLAN COST (EST.)</div></div>',
+                f'{summary["cost_category"]}</div><div class="score-label">PLAN COST {"(REAL)" if is_real_plan else "(EST.)"}</div></div>',
                 unsafe_allow_html=True,
             )
         with pc2:
             st.markdown(
                 f'<div class="score-card"><div class="score-number" style="color:#a8b2d8;font-size:1.4rem">'
-                f'{summary["estimated_rows"]:,}</div><div class="score-label">EST. OUTPUT ROWS</div></div>',
+                f'{summary["estimated_rows"]:,}</div><div class="score-label">ROWS EXAMINED</div></div>',
                 unsafe_allow_html=True,
             )
         with pc3:
             icon = "🟢" if summary["has_index_scan"] else "🔴"
-            label = "ref / range" if summary["has_index_scan"] else "ALL (Table Scan)"
+            label = "ref / range / eq_ref" if summary["has_index_scan"] else "ALL (Table Scan)"
             st.markdown(
                 f'<div class="score-card"><div class="score-number" style="font-size:1.4rem">'
-                f'{icon} {label}</div><div class="score-label">EST. ACCESS TYPE</div></div>',
+                f'{icon} {label}</div><div class="score-label">PRIMARY ACCESS TYPE</div></div>',
                 unsafe_allow_html=True,
             )
         with pc4:
@@ -741,11 +791,18 @@ with tab_advanced:
 
         _NODE_COLORS = {
             "ALL":             "#e74c3c",
+            "REF":             "#2ecc71",
+            "EQ_REF":          "#2ecc71",
+            "CONST":           "#1abc9c",
+            "RANGE":           "#27ae60",
+            "INDEX":           "#f39c12",
             "ref":             "#2ecc71",
             "range":           "#27ae60",
             "eq_ref":          "#2ecc71",
             "const":           "#1abc9c",
             "index":           "#f39c12",
+            "Ordering":        "#8e44ad",
+            "Grouping":        "#16a085",
             "Filter":          "#3498db",
             "filesort":        "#8e44ad",
             "temporary":       "#d35400",
@@ -754,6 +811,7 @@ with tab_advanced:
             "Aggregate":       "#16a085",
             "Limit":           "#7f8c8d",
             "Subquery":        "#c0392b",
+            "Result":          "#2980b9",
             # Compatibility fallbacks
             "Seq Scan":        "#e74c3c",
             "Index Scan":      "#2ecc71",
@@ -822,6 +880,14 @@ with tab_advanced:
         with st.expander("📄 Execution Plan Detail Table"):
             plan_df = pd.DataFrame(flatten_plan(plan_root))
             st.dataframe(plan_df, use_container_width=True, hide_index=True)
+
+        if raw_analyze_output:
+            with st.expander("⏱️ EXPLAIN ANALYZE Execution Output"):
+                st.code(raw_analyze_output, language="text")
+
+        if raw_explain_json:
+            with st.expander("📋 Raw EXPLAIN FORMAT=JSON"):
+                st.json(raw_explain_json)
 
         # Legend
         st.caption(
