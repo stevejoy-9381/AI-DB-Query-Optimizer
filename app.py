@@ -13,8 +13,9 @@ import streamlit as st
 
 from analyzer import analyze_query
 from scoring import compute_score, simulate_optimized_score
-from optimizer import generate_optimizations, generate_ai_insight
+from optimizer import generate_optimizations, generate_rule_insight
 from recommendations import generate_index_recommendations, detect_redundant_indexes, BEST_PRACTICES
+from ai import get_ai_insight
 from execution_plan import (
     generate_execution_plan, flatten_plan, get_all_nodes, plan_summary, PlanNode
 )
@@ -148,9 +149,9 @@ st.markdown(
 st.markdown(
     """
 <div class="main-header">
-    <h1>⚡ AI-Powered SQL Query Optimizer</h1>
-    <p>Index Recommendation Engine &nbsp;|&nbsp; Pattern Detection &nbsp;|&nbsp;
-       Performance Scoring &nbsp;|&nbsp; Query Analysis</p>
+    <h1>⚡ MySQL Query Optimizer & Index Recommender</h1>
+    <p>Deterministic Rule Engine &nbsp;|&nbsp; AST Pattern Detection &nbsp;|&nbsp;
+       Index Advice &nbsp;|&nbsp; Optional LLM Assistant</p>
 </div>
 """,
     unsafe_allow_html=True,
@@ -270,6 +271,19 @@ with st.sidebar:
         st.session_state.history = []
         st.rerun()
 
+    st.markdown("---")
+    st.markdown("### 🤖 AI Assistant (Optional)")
+    enable_ai = st.checkbox(
+        "Enable LLM Insights",
+        value=False,
+        help="Use Google Gemini or OpenAI for LLM-powered natural language insights and rewrites. Off by default.",
+    )
+    if enable_ai:
+        st.caption(
+            "🔒 **Privacy Notice:** When enabled, only the query syntax and schema column definitions are sent to the AI provider. "
+            "No database row data or user credentials are ever transmitted."
+        )
+
 # ---------------------------------------------------------------------------
 # Main tabs
 # ---------------------------------------------------------------------------
@@ -322,18 +336,31 @@ with tab_analyze:
             opt_score     = simulate_optimized_score(analysis)
             optimizations = generate_optimizations(query, analysis)
             index_recs    = generate_index_recommendations(query, analysis, schema=active_schema)
-            ai_insight    = generate_ai_insight(query, analysis, score_result.total)
+            ai_data       = get_ai_insight(
+                query=query,
+                analysis=analysis,
+                score=score_result.total,
+                schema=active_schema,
+                enabled=enable_ai,
+            )
+            ai_insight    = ai_data["insight"]
+            ai_source     = ai_data["source"]
+            ai_suggested  = ai_data.get("suggested_query")
+            ai_rewrite_status = ai_data.get("rewrite_status")
             formatted_sql = format_sql(query)
 
         # Store for Advanced Analysis tab
         st.session_state.last_result = {
-            "query":         query,
-            "analysis":      analysis,
-            "score_result":  score_result,
-            "opt_score":     opt_score,
-            "optimizations": optimizations,
-            "index_recs":    index_recs,
-            "ai_insight":    ai_insight,
+            "query":             query,
+            "analysis":          analysis,
+            "score_result":      score_result,
+            "opt_score":         opt_score,
+            "optimizations":     optimizations,
+            "index_recs":        index_recs,
+            "ai_insight":        ai_insight,
+            "ai_source":         ai_source,
+            "ai_suggested":      ai_suggested,
+            "ai_rewrite_status": ai_rewrite_status,
         }
 
         # Save to history
@@ -579,8 +606,21 @@ with tab_analyze:
             st.markdown('<div class="section-header">🖊️ Formatted SQL</div>', unsafe_allow_html=True)
             st.code(formatted_sql, language="sql")
 
-            st.markdown('<div class="section-header" style="margin-top:1rem">🤖 AI Insight</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="section-header" style="margin-top:1rem">'
+                f'💡 Performance Insight <span style="font-size:0.75rem; background:#222; border:1px solid #444; padding:2px 8px; border-radius:4px; margin-left:8px; vertical-align:middle;">🏷️ {ai_source}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             st.info(ai_insight)
+            if ai_suggested:
+                badge = ai_rewrite_status or "AI suggestion (unverified)"
+                badge_color = "#2ecc71" if "Verified" in badge else "#f39c12"
+                st.markdown(
+                    f"**Suggested Rewrite** <span style='font-size:0.75rem; background:{badge_color}; color:#000; padding:2px 6px; border-radius:3px; font-weight:bold;'>{badge}</span>",
+                    unsafe_allow_html=True,
+                )
+                st.code(ai_suggested, language="sql")
 
         st.markdown("---")
 
@@ -647,9 +687,9 @@ with tab_analyze:
         st.markdown('<div class="section-header">📤 Export Analysis Report</div>', unsafe_allow_html=True)
         ex1, ex2, ex3 = st.columns(3)
 
-        json_report = build_json_report(query, analysis, score_result, optimizations, index_recs, opt_score)
-        csv_report  = build_csv_report(query, analysis, score_result, opt_score)
-        text_report = build_text_report(query, analysis, score_result, optimizations, index_recs, opt_score, ai_insight)
+        json_report = build_json_report(query, analysis, score_result, optimizations, index_recs, opt_score, insight_text=ai_insight, insight_source=ai_source)
+        csv_report  = build_csv_report(query, analysis, score_result, opt_score, insight_source=ai_source)
+        text_report = build_text_report(query, analysis, score_result, optimizations, index_recs, opt_score, ai_insight, insight_source=ai_source)
 
         with ex1:
             st.download_button(

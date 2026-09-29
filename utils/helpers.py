@@ -81,6 +81,8 @@ def build_json_report(
     optimizations: list[dict],
     index_recs: list[dict],
     optimized_score: int,
+    insight_text: str = "",
+    insight_source: str = "Rule-based Engine",
 ) -> str:
     """Serialize a full analysis report to a JSON string."""
     report = {
@@ -103,6 +105,10 @@ def build_json_report(
             "rows_scanned_estimate": score_result.rows_scanned_estimate,
             "breakdown": score_result.breakdown,
         },
+        "insight": {
+            "text": insight_text,
+            "source": insight_source,
+        },
         "optimizations": optimizations,
         "index_recommendations": index_recs,
     }
@@ -114,6 +120,7 @@ def build_csv_report(
     analysis: dict,
     score_result,
     optimized_score: int,
+    insight_source: str = "Rule-based Engine",
 ) -> str:
     """Serialize a summary analysis report to CSV."""
     output = io.StringIO()
@@ -127,6 +134,7 @@ def build_csv_report(
     writer.writerow(["Improvement", optimized_score - score_result.total])
     writer.writerow(["Cost Estimate", score_result.cost_estimate])
     writer.writerow(["Rows Scanned Estimate", score_result.rows_scanned_estimate])
+    writer.writerow(["Insight Source", insight_source])
     writer.writerow(["Issues Count", len(analysis["issues"])])
     writer.writerow(["Warnings Count", len(analysis["warnings"])])
     for i, issue in enumerate(analysis["issues"], 1):
@@ -144,14 +152,16 @@ def build_text_report(
     index_recs: list[dict],
     optimized_score: int,
     ai_insight: str,
+    insight_source: str = "Rule-based Engine",
 ) -> str:
     """Serialize a human-readable text report."""
     sep = "=" * 70
     thin = "-" * 70
     lines: list[str] = [
         sep,
-        "  AI-POWERED SQL QUERY OPTIMIZATION REPORT",
-        f"  Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        "  SQL QUERY OPTIMIZATION REPORT",
+        f"  Generated     : {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"  Insight Source: {insight_source}",
         sep,
         "",
         "QUERY",
@@ -160,13 +170,13 @@ def build_text_report(
         "",
         "SUMMARY",
         thin,
-        f"  Query Type  : {analysis['query_type']}",
-        f"  Complexity  : {analysis['complexity']}",
-        f"  Score       : {score_result.total} / 100",
-        f"  Cost        : {score_result.cost_estimate}",
-        f"  Rows Scan   : {score_result.rows_scanned_estimate}",
+        f"  Query Type    : {analysis['query_type']}",
+        f"  Complexity    : {analysis['complexity']}",
+        f"  Score         : {score_result.total} / 100",
+        f"  Cost          : {score_result.cost_estimate}",
+        f"  Rows Scan     : {score_result.rows_scanned_estimate}",
         "",
-        "AI INSIGHT",
+        f"INSIGHT ({insight_source})",
         thin,
         # Strip markdown bold markers for plain text
         ai_insight.replace("**", ""),

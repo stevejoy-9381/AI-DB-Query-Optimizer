@@ -241,10 +241,10 @@ def generate_optimizations(query: str, analysis: dict) -> list[dict]:
     return recs
 
 
-def generate_ai_insight(query: str, analysis: dict, score: int) -> str:
+def generate_rule_insight(query: str, analysis: dict, score: int) -> str:
     """
-    Generate a natural-language AI insight paragraph about the query.
-    (Rule-based; no external LLM required.)
+    Generate a natural-language rule-based insight paragraph about the query.
+    (Deterministic rule engine; no external LLM required.)
     """
     parts: list[str] = []
 
@@ -297,3 +297,14 @@ def generate_ai_insight(query: str, analysis: dict, score: int) -> str:
         )
 
     return " ".join(parts)
+
+
+def generate_ai_insight(query: str, analysis: dict, score: int) -> str:
+    """Deprecated alias for generate_rule_insight. Retained for backward compatibility."""
+    import warnings
+    warnings.warn(
+        "generate_ai_insight is deprecated and will be removed in a future release. Use generate_rule_insight instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return generate_rule_insight(query, analysis, score)
