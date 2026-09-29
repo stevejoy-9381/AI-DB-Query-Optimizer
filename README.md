@@ -1,5 +1,7 @@
 # Rule-Based SQL Query Analyzer & Index Recommender
 
+[![CI](https://github.com/d-steven-son/ai-db-query-optimizer/actions/workflows/ci.yml/badge.svg)](https://github.com/d-steven-son/ai-db-query-optimizer/actions)
+[![Coverage](https://img.shields.io/badge/Coverage-89%25-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-red?logo=streamlit)](https://streamlit.io/)
 [![Plotly](https://img.shields.io/badge/Plotly-5.18+-purple?logo=plotly)](https://plotly.com/)
