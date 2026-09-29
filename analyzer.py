@@ -357,7 +357,7 @@ def _analyze_with_features(query: str, features: QueryFeatures, schema: SchemaIn
             continue
         existing_codes.add(finding.code)
         entry = finding.to_dict()
-        if finding.severity == "HIGH":
+        if finding.severity in ("CRITICAL", "HIGH"):
             issues.append(entry)
         else:
             warnings.append(entry)
@@ -409,6 +409,11 @@ def _analyze_with_features(query: str, features: QueryFeatures, schema: SchemaIn
 
     return {
         "query_type": features.statement_type,
+        "statement_type": features.statement_type,
+        "is_insert_select": features.is_insert_select,
+        "insert_row_count": features.insert_row_count,
+        "is_cte": features.is_cte,
+        "has_window_functions": features.has_window_functions,
         "complexity": complexity,
         "issues": issues,
         "warnings": warnings,

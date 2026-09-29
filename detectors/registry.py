@@ -20,6 +20,19 @@ from detectors.having_as_where import HavingAsWhereDetector
 from detectors.count_distinct import CountDistinctDetector
 from detectors.leading_wildcard import LeadingWildcardDetector
 from detectors.union_all import UnionInsteadOfUnionAllDetector
+from detectors.update_delete_where import (
+    UpdateWithoutWhereDetector,
+    DeleteWithoutWhereDetector,
+    UpdateDeleteUnindexedWhereDetector,
+)
+from detectors.insert_patterns import (
+    InsertSingleRowDetector,
+    InsertSelectUnboundedDetector,
+)
+from detectors.cte_window_patterns import (
+    CteMultiplyReferencedDetector,
+    WindowWithoutPartitionDetector,
+)
 
 from query_model import QueryFeatures
 from db.schema import SchemaInfo
@@ -39,6 +52,13 @@ DETECTOR_REGISTRY: list[BaseDetector] = [
     CountDistinctDetector(),
     LeadingWildcardDetector(),
     UnionInsteadOfUnionAllDetector(),
+    UpdateWithoutWhereDetector(),
+    DeleteWithoutWhereDetector(),
+    UpdateDeleteUnindexedWhereDetector(),
+    InsertSingleRowDetector(),
+    InsertSelectUnboundedDetector(),
+    CteMultiplyReferencedDetector(),
+    WindowWithoutPartitionDetector(),
 ]
 
 

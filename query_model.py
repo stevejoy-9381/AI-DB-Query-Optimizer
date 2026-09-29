@@ -71,6 +71,13 @@ class QueryFeatures:
     filter_columns: list[str] = field(default_factory=list)
     is_valid: bool = True
     raw_ast: Any = None
+    # Statement-type specific attributes
+    is_insert_select: bool = False
+    insert_row_count: int | None = None
+    is_cte: bool = False
+    cte_references: dict[str, int] = field(default_factory=dict)
+    has_window_functions: bool = False
+    window_functions: list[dict] = field(default_factory=list)
 
 
 def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
@@ -97,22 +104,52 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
     if isinstance(ast, exp.Select):
         features.statement_type = "SELECT"
     elif isinstance(ast, exp.Insert):
-        features.statement_type = "INSERT"
+        if ast.find(exp.Select):
+            features.statement_type = "INSERT...SELECT"
+            features.is_insert_select = True
+        else:
+            features.statement_type = "INSERT"
+        values_node = ast.find(exp.Values)
+        if values_node and values_node.expressions:
+            features.insert_row_count = len(values_node.expressions)
     elif isinstance(ast, exp.Update):
         features.statement_type = "UPDATE"
     elif isinstance(ast, exp.Delete):
         features.statement_type = "DELETE"
+    elif isinstance(ast, exp.Union):
+        features.statement_type = "UNION"
     else:
         features.statement_type = ast.key.upper()
 
     # 2. CTEs (WITH clause)
     with_clause = ast.args.get("with")
     if with_clause:
+        features.is_cte = True
         for cte in with_clause.expressions:
             if hasattr(cte, "alias") and cte.alias:
+                alias_name = cte.alias.lower()
                 features.ctes.append(cte.alias)
-        if not features.statement_type or features.statement_type == "UNKNOWN":
-            features.statement_type = "CTE/WITH"
+                # Count occurrences of this CTE alias in table references
+                ref_count = 0
+                for tbl in ast.find_all(exp.Table):
+                    if tbl.name.lower() == alias_name and tbl.parent != cte:
+                        ref_count += 1
+                features.cte_references[alias_name] = ref_count
+
+        if features.statement_type == "SELECT" and features.ctes:
+            features.statement_type = "CTE"
+
+    # 2b. Window Functions
+    for w in ast.find_all(exp.Window):
+        features.has_window_functions = True
+        func = w.this
+        func_name = getattr(func, "key", str(func)).upper()
+        partition_by = w.args.get("partition_by")
+        has_partition = bool(partition_by)
+        features.window_functions.append({
+            "function": func_name,
+            "has_partition": has_partition,
+        })
 
     # 3. Tables & Aliases
     tables_found: list[str] = []
@@ -177,7 +214,7 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
         ))
 
     # 6. WHERE Clause & Predicates
-    where_clause = ast.args.get("where")
+    where_clause = ast.args.get("where") or ast.find(exp.Where)
     features.has_where = where_clause is not None
 
     filter_cols: set[str] = set()
@@ -239,14 +276,14 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
             features.order_by_cols.append(o_expr.sql(dialect=dialect))
 
     # 9. LIMIT & OFFSET
-    limit_clause = ast.args.get("limit")
+    limit_clause = ast.args.get("limit") or ast.find(exp.Limit)
     if limit_clause and limit_clause.expression:
         try:
             features.limit = int(limit_clause.expression.name)
         except (ValueError, TypeError, AttributeError):
             pass
 
-    offset_clause = ast.args.get("offset")
+    offset_clause = ast.args.get("offset") or ast.find(exp.Offset)
     if offset_clause and offset_clause.expression:
         try:
             features.offset = int(offset_clause.expression.name)

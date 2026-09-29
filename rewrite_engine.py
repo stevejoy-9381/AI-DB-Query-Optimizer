@@ -221,6 +221,17 @@ def rewrite_query(query: str, analysis: dict) -> dict:
     current  = query.strip()
     changes: list[str] = []
 
+    stmt_type = analysis.get("statement_type") or analysis.get("query_type", "SELECT")
+    if stmt_type not in ("SELECT", "CTE", "UNION"):
+        return {
+            "original": _format_sql(query),
+            "rewritten": _format_sql(query),
+            "changes": [f"No automatic rewrite available for {stmt_type} statements (safe analysis only)."],
+            "is_changed": False,
+            "rewrite_score_est": 0,
+            "supported": False,
+        }
+
     # ---- 1. Rewrite IN subquery → JOIN (do this first, before SELECT * rewrite) ----
     if "SUBQUERY_DETECTED" in all_codes:
         result = _rewrite_in_subquery_to_join(current)

@@ -124,4 +124,20 @@ query,description,category
 "SELECT id, total FROM orders WHERE id > 5000 ORDER BY id ASC LIMIT 20;","Keyset / cursor pagination avoiding deep OFFSET overhead",Good
 "SELECT c.id, c.name FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);","Safe NOT EXISTS rewrite replacing dangerous NOT IN",Good
 "SELECT id FROM orders WHERE status = 'shipped' UNION ALL SELECT id FROM orders WHERE status = 'delivered';","Streaming UNION ALL avoiding temporary filesort",Good
+"UPDATE users SET status = 'inactive';","UPDATE without WHERE clause affecting all rows",Anti-pattern
+"UPDATE orders SET status = 'completed' WHERE id = 10;","Targeted UPDATE on primary key filter",Good
+"UPDATE customers SET phone = '555-0199' WHERE phone = 12345;","UPDATE with implicit type conversion",Anti-pattern
+"DELETE FROM logs;","DELETE without WHERE clause wiping whole table",Anti-pattern
+"DELETE FROM sessions WHERE expires_at < NOW();","Targeted DELETE with WHERE criteria",Good
+"DELETE FROM audit_log WHERE event = 'login_failed';","DELETE with unindexed WHERE filter",Moderate
+"INSERT INTO customers (id, name, email) VALUES (1, 'Alice', 'alice@example.com');","Single-row INSERT executed individually",Moderate
+"INSERT INTO customers (id, name, email) VALUES (1, 'Alice', 'alice@example.com'), (2, 'Bob', 'bob@example.com');","Multi-row bulk INSERT batch",Good
+"INSERT INTO archived_orders SELECT * FROM orders;","Unbounded INSERT...SELECT transaction",Anti-pattern
+"INSERT INTO archived_orders SELECT id, total FROM orders WHERE status = 'delivered' LIMIT 1000;","Chunked INSERT...SELECT with filter and limit",Good
+"WITH user_orders AS (SELECT customer_id, COUNT(*) AS cnt FROM orders GROUP BY customer_id) SELECT c.name, u1.cnt, u2.cnt FROM customers c JOIN user_orders u1 ON c.id = u1.customer_id JOIN user_orders u2 ON c.id = u2.customer_id;","CTE referenced multiple times in outer query",Moderate
+"WITH recent_orders AS (SELECT * FROM orders WHERE created_at > '2024-01-01') SELECT * FROM recent_orders LIMIT 10;","Standard Common Table Expression (CTE)",Good
+"SELECT id, total, ROW_NUMBER() OVER (ORDER BY total DESC) FROM orders;","Window function without PARTITION BY global scan",Moderate
+"SELECT id, customer_id, total, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY total DESC) FROM orders;","Window function partitioned by customer_id",Good
+"SELECT id, name FROM customers UNION ALL SELECT id, name FROM suppliers;","Streamed UNION ALL across distinct tables",Good
+
 

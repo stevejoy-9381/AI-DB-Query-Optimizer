@@ -398,6 +398,15 @@ with tab_analyze:
                 unsafe_allow_html=True,
             )
 
+        # Non-SELECT statement safety badge
+        detected_stmt = analysis.get("statement_type") or analysis.get("query_type", "SELECT")
+        if detected_stmt in ("INSERT", "UPDATE", "DELETE", "INSERT...SELECT"):
+            st.info(
+                f"🛡️ **Safety Guard: Analysis Only Mode** — Detected `{detected_stmt}` statement. "
+                "Non-SELECT queries are analyzed statically and will never be executed or explained against live databases.",
+                icon="🛡️",
+            )
+
         st.markdown("---")
 
         # ---- Row 2: Charts ----
@@ -720,7 +729,10 @@ with tab_advanced:
         raw_explain_json: dict | None = None
         is_real_plan = False
 
-        if is_connected:
+        adv_stmt_type = adv_analysis.get("statement_type") or adv_analysis.get("query_type", "SELECT")
+        is_safe_for_live = adv_stmt_type in ("SELECT", "CTE", "UNION")
+
+        if is_connected and is_safe_for_live:
             col_plan_mode, col_plan_opt = st.columns([3, 2])
             with col_plan_mode:
                 plan_choice = st.radio(
@@ -755,6 +767,12 @@ with tab_advanced:
             else:
                 plan_root = generate_execution_plan(adv_query, adv_analysis)
                 st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (User Selected)", icon="ℹ️")
+        elif not is_safe_for_live:
+            plan_root = generate_execution_plan(adv_query, adv_analysis)
+            st.warning(
+                f"🛡️ **Safety Guard Active:** Real MySQL EXPLAIN is disabled for `{adv_stmt_type}` statements to prevent accidental table locks or execution. Displaying simulated execution plan.",
+                icon="🔒",
+            )
         else:
             plan_root = generate_execution_plan(adv_query, adv_analysis)
             st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (Connect to MySQL in sidebar for real EXPLAIN)", icon="ℹ️")
@@ -1069,6 +1087,11 @@ with tab_advanced:
 
         if engine is None:
             st.info("⚪ **Offline Mode:** Connect to a MySQL database in the sidebar to benchmark queries live.", icon="ℹ️")
+        elif not is_safe_for_live:
+            st.warning(
+                f"🛡️ **Safety Guard Active:** Live benchmarking is strictly disabled for `{adv_stmt_type}` statements to prevent accidental table locks or data mutations.",
+                icon="🔒",
+            )
         else:
             default_compare_sql = rewrite["rewritten"] if rewrite.get("is_changed") else adv_query
             bc_col1, bc_col2 = st.columns([1, 1])

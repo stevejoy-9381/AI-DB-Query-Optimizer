@@ -217,7 +217,10 @@ def generate_optimizations(query: str, analysis: dict) -> list[dict]:
         if code in ("CORRELATED_SUBQUERY", "OR_DIFFERENT_COLUMNS", "IMPLICIT_TYPE_CONVERSION",
                     "NOT_IN_SUBQUERY", "ORDER_BY_RAND", "UNINDEXED_ORDER_BY", "LARGE_OFFSET",
                     "MISSING_JOIN_CONDITION", "NON_SARGABLE_ARITHMETIC", "HAVING_AS_WHERE",
-                    "COUNT_DISTINCT", "UNION_INSTEAD_OF_UNION_ALL"):
+                    "COUNT_DISTINCT", "UNION_INSTEAD_OF_UNION_ALL",
+                    "UPDATE_WITHOUT_WHERE", "DELETE_WITHOUT_WHERE", "UPDATE_DELETE_UNINDEXED_WHERE",
+                    "INSERT_SINGLE_ROW", "INSERT_SELECT_UNBOUNDED",
+                    "CTE_MULTIPLY_REFERENCED", "WINDOW_WITHOUT_PARTITION"):
             title = code.replace("_", " ").title()
             priority = item.get("severity", "MEDIUM")
             desc = item.get("message", "")
@@ -231,8 +234,8 @@ def generate_optimizations(query: str, analysis: dict) -> list[dict]:
                     "example": example,
                 })
 
-    # Sort: HIGH first, then MEDIUM, then LOW
-    priority_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    # Sort: CRITICAL first, then HIGH, then MEDIUM, then LOW
+    priority_order = {"CRITICAL": -1, "HIGH": 0, "MEDIUM": 1, "LOW": 2}
     recs.sort(key=lambda r: priority_order.get(r["priority"], 99))
 
     return recs
