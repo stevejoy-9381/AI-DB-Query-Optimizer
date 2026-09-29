@@ -111,10 +111,39 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
             "ai_rewrite_status": ai_rewrite_status,
         }
 
-        # Save to history
+        # Save to session history
         rec = history_record(query, analysis, score_result.total)
         rec["cost"] = score_result.cost_estimate
         st.session_state[KEY_HISTORY].append(rec)
+
+        # Save to persistent SQLite history if enabled
+        if st.session_state.get("save_history_locally", True):
+            try:
+                from history_store import HistoryStore
+                store = HistoryStore()
+                store.add(
+                    query=query,
+                    score=score_result.total,
+                    report_dict={
+                        "score": score_result.total,
+                        "complexity": analysis.get("complexity", "O(n)"),
+                        "cost": score_result.cost_estimate,
+                        "statement_type": analysis.get("statement_type", "SELECT"),
+                        "findings_count": len(analysis.get("issues", [])),
+                        "optimizations_count": len(optimizations),
+                        "index_recs_count": len(index_recs),
+                        "ai_source": ai_source,
+                    },
+                    statement_type=analysis.get("statement_type", "SELECT"),
+                    complexity=analysis.get("complexity", "O(n)"),
+                    cost=score_result.cost_estimate,
+                    dialect="mysql",
+                    mode="live" if sidebar_state.is_connected else "offline",
+                    source_badges=ai_source,
+                )
+            except Exception as hist_err:
+                import logging
+                logging.getLogger(__name__).warning("Failed to persist history record: %s", hist_err)
 
         st.markdown("---")
 

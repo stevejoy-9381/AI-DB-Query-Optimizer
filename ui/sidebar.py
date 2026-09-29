@@ -208,7 +208,13 @@ def render_sidebar() -> SidebarState:
         st.markdown("---")
 
         # Session analytics
-        st.markdown("### 📊 Session Stats")
+        st.markdown("### 📊 Session & History")
+        st.checkbox(
+            "💾 Save History Locally",
+            value=True,
+            key="save_history_locally",
+            help="Persists query history in local SQLite database (data/history.db). Queries are stored locally only.",
+        )
         history = st.session_state.get(KEY_HISTORY, [])
         st.metric("Queries Analyzed", len(history))
         if history:
