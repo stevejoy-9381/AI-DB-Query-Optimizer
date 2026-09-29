@@ -1,0 +1,62 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: query_optimizer_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-shop_db}
+      MYSQL_USER: ${DB_USER:-readonly_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-local_dev_pass}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: query_optimizer_app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-readonly_user}
+      DB_PASSWORD: ${DB_PASSWORD:-local_dev_pass}
+      DB_DATABASE: ${DB_DATABASE:-shop_db}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_DIALECT: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: query_optimizer_seed
+    profiles:
+      - seed
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      DB_DATABASE: ${DB_DATABASE:-shop_db}
+    command: ["python", "scripts/seed_db.py", "--scale", "small"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

@@ -273,7 +273,41 @@ Open your browser and navigate to **http://localhost:8501**.
 
 ---
 
+## 🐳 Run with Docker
+
+Run the entire application along with a dedicated MySQL 8.0 container using Docker Compose:
+
+### 1. Build and Start Services
+```bash
+# Build the application image and start MySQL & Streamlit
+docker compose up -d --build
+```
+
+### 2. Seed Sample Database
+Populate `shop_db` with realistic synthetic data using the seed profile:
+```bash
+docker compose run --rm seed
+```
+
+### 3. Access Dashboard
+Open your browser and navigate to:
+```
+http://localhost:8501
+```
+
+### 4. Stop or Reset Environment
+```bash
+# Stop containers
+docker compose down
+
+# Stop and wipe database volume for a clean reset
+docker compose down -v
+```
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+
 
