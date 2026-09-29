@@ -363,3 +363,28 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
                 mime="text/plain",
                 use_container_width=True,
             )
+    else:
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 35px 20px; border: 2px dashed rgba(255,255,255,0.15); border-radius: 12px; margin-top: 25px;">
+                <h3 style="color: #38bdf8; margin-bottom: 8px;">⚡ Ready to Analyze & Optimize</h3>
+                <p style="color: #94a3b8; font-size: 0.95rem; margin-bottom: 16px;">
+                    Paste any MySQL 8.x SELECT, UPDATE, or DELETE query above, or click a pre-built sample below to start immediately:
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        sample_col1, sample_col2, sample_col3 = st.columns(3)
+        with sample_col1:
+            if st.button("🛒 Sample: Unindexed JOIN", use_container_width=True, key="empty_sample_join"):
+                st.session_state["main_query_input"] = "SELECT c.name, o.id FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.name LIKE '%Smith';"
+                st.rerun()
+        with sample_col2:
+            if st.button("📊 Sample: Aggregate Without Index", use_container_width=True, key="empty_sample_agg"):
+                st.session_state["main_query_input"] = "SELECT status, count(*) FROM orders GROUP BY status HAVING count(*) > 10;"
+                st.rerun()
+        with sample_col3:
+            if st.button("⚠️ Sample: Leading Wildcard", use_container_width=True, key="empty_sample_wild"):
+                st.session_state["main_query_input"] = "SELECT * FROM products WHERE name LIKE '%electronics%';"
+                st.rerun()
