@@ -185,3 +185,151 @@ def test_query_12_deduplication_of_index_names():
 
     names = [r["index_name"] for r in recs]
     assert len(names) == len(set(names)), f"Duplicate index names found: {names}"
+
+
+def test_query_13_composite_equality_range_sort_ordering():
+    """Query 13: Order composite index by equality -> range -> ORDER BY columns."""
+    query = (
+        "SELECT id, total FROM orders "
+        "WHERE status = 'pending' AND total > 100.00 "
+        "ORDER BY order_date;"
+    )
+    analysis = analyze_query(query)
+    recs = generate_index_recommendations(query, analysis)
+
+    comp_rec = next((r for r in recs if r["index_type"] == "Composite B-tree"), None)
+    assert comp_rec is not None
+    # Expected order: status (eq) -> total (range) -> order_date (sort)
+    assert "ON orders(status, total, order_date);" in comp_rec["ddl"]
+    assert comp_rec["column_order_explanation"] is not None
+    assert "Equality column" in comp_rec["column_order_explanation"]
+    assert "Range column" in comp_rec["column_order_explanation"]
+    assert "Sorting column" in comp_rec["column_order_explanation"]
+
+
+def test_query_14_composite_index_capped_at_four_columns():
+    """Query 14: Composite candidate with >4 columns is capped at 4 with a warning."""
+    query = (
+        "SELECT id FROM events "
+        "WHERE c1 = '1' AND c2 = '2' AND c3 = '3' AND c4 = '4' AND c5 > '5';"
+    )
+    analysis = analyze_query(query)
+    recs = generate_index_recommendations(query, analysis)
+
+    comp_rec = next((r for r in recs if r["index_type"] == "Composite B-tree"), None)
+    assert comp_rec is not None
+    # Verify index has at most 4 columns in the DDL
+    m = re.search(r"ON events\((.+?)\);", comp_rec["ddl"])
+    assert m is not None
+    cols = [c.strip() for c in m.group(1).split(",")]
+    assert len(cols) <= 4
+    assert comp_rec.get("is_capped") is True
+    assert "Capped at 4 columns" in comp_rec["reason"]
+
+
+def test_query_15_size_estimation_and_trade_offs_with_schema():
+    """Query 15: Index size estimation and trade-offs notes."""
+    from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
+    from recommendations import estimate_index_size_bytes
+
+    schema = SchemaInfo(database="testdb")
+    tbl = TableInfo(name="orders", estimated_rows=100_000)
+    tbl.columns["customer_id"] = ColumnInfo(name="customer_id", data_type="int")
+    tbl.columns["status"] = ColumnInfo(name="status", data_type="varchar(20)")
+    schema.tables["orders"] = tbl
+
+    bytes_est, label = estimate_index_size_bytes("orders", ["customer_id", "status"], schema)
+    assert bytes_est is not None
+    assert bytes_est > 0
+    assert "estimate" in label.lower()
+    assert "InnoDB B-tree" in label
+
+    query = "SELECT id FROM orders WHERE customer_id = 10 AND status = 'shipped';"
+    analysis = analyze_query(query, schema=schema)
+    recs = generate_index_recommendations(query, analysis, schema=schema)
+
+    for rec in recs:
+        assert "trade_offs" in rec
+        assert "Trade-offs:" in rec["trade_offs"]
+        assert "write overhead" in rec["trade_offs"].lower()
+        assert "estimate" in rec["estimated_size"].lower()
+
+
+def test_query_16_detect_duplicate_and_prefix_redundant_indexes():
+    """Query 16: Detect redundant existing indexes in schema and suggest DROP INDEX."""
+    from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
+    from recommendations import detect_redundant_indexes
+
+    schema = SchemaInfo(database="testdb")
+    tbl = TableInfo(name="orders", estimated_rows=50_000)
+    tbl.columns["id"] = ColumnInfo(name="id", data_type="int")
+    tbl.columns["customer_id"] = ColumnInfo(name="customer_id", data_type="int")
+    tbl.columns["status"] = ColumnInfo(name="status", data_type="varchar(20)")
+
+    # Primary key
+    tbl.indexes["primary"] = IndexInfo(name="PRIMARY", table_name="orders", columns=["id"], is_primary=True)
+    # Composite index
+    tbl.indexes["idx_cust_status"] = IndexInfo(
+        name="idx_cust_status", table_name="orders", columns=["customer_id", "status"]
+    )
+    # Redundant prefix index
+    tbl.indexes["idx_cust"] = IndexInfo(
+        name="idx_cust", table_name="orders", columns=["customer_id"]
+    )
+    # Duplicate of idx_cust_status
+    tbl.indexes["idx_dup"] = IndexInfo(
+        name="idx_dup", table_name="orders", columns=["customer_id", "status"]
+    )
+    schema.tables["orders"] = tbl
+
+    redundant = detect_redundant_indexes(schema)
+    assert len(redundant) >= 2
+
+    # Check for duplicate detection
+    dup = next((r for r in redundant if r["type"] == "DUPLICATE_INDEX"), None)
+    assert dup is not None
+    assert "DROP INDEX idx_dup ON orders;" in dup["ddl"]
+    assert "Never drop automatically" in dup["warning"]
+
+    # Check for prefix redundancy detection
+    pref = next((r for r in redundant if r["type"] == "PREFIX_REDUNDANT"), None)
+    assert pref is not None
+    assert "DROP INDEX idx_cust ON orders;" in pref["ddl"]
+    assert "strict leftmost prefix" in pref["reason"]
+
+
+def test_query_17_leftmost_prefix_skips_recommendation():
+    """Query 17: Existing composite index skips single-column prefix recommendation."""
+    from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
+
+    schema = SchemaInfo(database="testdb")
+    tbl = TableInfo(name="users", estimated_rows=10_000)
+    tbl.columns["email"] = ColumnInfo(name="email", data_type="varchar(255)")
+    tbl.columns["created_at"] = ColumnInfo(name="created_at", data_type="datetime")
+    tbl.indexes["idx_email_created"] = IndexInfo(
+        name="idx_email_created", table_name="users", columns=["email", "created_at"]
+    )
+    schema.tables["users"] = tbl
+
+    query = "SELECT email FROM users WHERE email = 'test@example.com';"
+    analysis = analyze_query(query, schema=schema)
+    recs = generate_index_recommendations(query, analysis, schema=schema)
+
+    # Since idx_email_created starts with email, idx_users_email should be skipped
+    assert not any(r["index_name"] == "idx_users_email" for r in recs)
+
+
+def test_query_18_recommendations_ranked_by_expected_benefit():
+    """Query 18: Recommendations are assigned rank and ordered by benefit_score."""
+    query = "SELECT total FROM orders WHERE customer_id = 10 AND status = 'completed';"
+    analysis = analyze_query(query)
+    recs = generate_index_recommendations(query, analysis)
+
+    assert len(recs) >= 2
+    # Verify rank is assigned sequentially 1, 2, ...
+    for i, r in enumerate(recs, 1):
+        assert r["rank"] == i
+    # Verify sorted descending by benefit_score
+    scores = [r["benefit_score"] for r in recs]
+    assert scores == sorted(scores, reverse=True)
+

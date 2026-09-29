@@ -14,7 +14,7 @@ import streamlit as st
 from analyzer import analyze_query
 from scoring import compute_score, simulate_optimized_score
 from optimizer import generate_optimizations, generate_ai_insight
-from recommendations import generate_index_recommendations, BEST_PRACTICES
+from recommendations import generate_index_recommendations, detect_redundant_indexes, BEST_PRACTICES
 from execution_plan import (
     generate_execution_plan, flatten_plan, get_all_nodes, plan_summary, PlanNode
 )
@@ -601,11 +601,45 @@ with tab_analyze:
         if not index_recs:
             st.info("No specific index recommendations for this query.")
         else:
-            for rec in index_recs:
-                with st.expander(f"📌 {rec['index_name']}  ({rec['index_type']})"):
+            top_n = index_recs[:2]
+            rest = index_recs[2:]
+
+            def _render_rec_card(rec):
+                with st.expander(
+                    f"📌 Rank #{rec.get('rank', 1)}: {rec['index_name']} ({rec['index_type']})",
+                    expanded=(rec.get("rank", 1) == 1),
+                ):
                     st.code(rec["ddl"], language="sql")
                     st.markdown(f"**Reason:** {rec['reason']}")
+                    if rec.get("column_order_explanation"):
+                        st.info(f"💡 **Column Ordering Rule:** {rec['column_order_explanation']}")
+                    if rec.get("estimated_size"):
+                        st.markdown(f"💾 **Estimated Index Size:** `{rec['estimated_size']}`")
+                    if rec.get("trade_offs"):
+                        st.markdown(f"⚖️ **Trade-offs:** {rec['trade_offs']}")
                     st.success(f"⚡ Estimated Improvement: {rec['estimated_improvement']}")
+
+            for rec in top_n:
+                _render_rec_card(rec)
+
+            if rest:
+                with st.expander(f"🔍 Advanced / Additional Index Options ({len(rest)} more)"):
+                    for rec in rest:
+                        _render_rec_card(rec)
+
+        # Redundant Index Audit (if live schema available)
+        if active_schema:
+            redundant_indexes = detect_redundant_indexes(active_schema)
+            if redundant_indexes:
+                with st.expander(f"⚠️ Redundant & Duplicate Index Audit ({len(redundant_indexes)} found in schema)"):
+                    st.caption(
+                        "The MySQL leftmost prefix rule makes sub-indexes redundant when a wider composite index already exists. "
+                        "Review suggestions below to eliminate write overhead and save disk space."
+                    )
+                    for red in redundant_indexes:
+                        st.code(red["ddl"], language="sql")
+                        st.markdown(f"**Reason:** {red['reason']}")
+                        st.warning(f"⚠️ {red['warning']}")
 
         st.markdown("---")
 
