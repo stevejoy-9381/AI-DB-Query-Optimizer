@@ -246,6 +246,7 @@ def _analyze_query_regex_fallback(query: str, schema: SchemaInfo | None = None) 
         "schema_validated": schema is not None,
         "unknown_tables": unknown_tables,
         "unknown_columns": unknown_columns,
+        "is_valid": True,
     }
 
 
@@ -432,6 +433,7 @@ def _analyze_with_features(query: str, features: QueryFeatures, schema: SchemaIn
         "unknown_columns": unknown_columns,
         "analysis_engine": "sqlglot_ast",
         "limited_analysis_notice": None,
+        "is_valid": features.is_valid,
     }
 
 
@@ -470,6 +472,7 @@ def analyze_query(query: str, schema: SchemaInfo | None = None) -> dict:
             "unknown_columns": [],
             "analysis_engine": "sqlglot_ast",
             "limited_analysis_notice": None,
+            "is_valid": False,
         }
 
     try:
