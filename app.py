@@ -1116,31 +1116,44 @@ with tab_advanced:
         )
         st.markdown("")
 
-        rw1, rw2 = st.columns(2)
-        with rw1:
-            st.markdown("**Original Query**")
-            st.code(rewrite["original"], language="sql")
-        with rw2:
-            st.markdown("**Rewritten Query**")
-            st.code(rewrite["rewritten"], language="sql")
-
-        st.markdown("")
-
         if rewrite["is_changed"]:
-            st.markdown("**Transformations Applied:**")
+            # ---- Side-by-Side Diff View ----
+            from utils.diff import generate_side_by_side_diff, render_diff_html
+            diff_obj = generate_side_by_side_diff(rewrite["original"], rewrite["rewritten"])
+            st.markdown("##### 🔀 Side-by-Side Query Comparison")
+            st.markdown(render_diff_html(diff_obj), unsafe_allow_html=True)
+
+            # ---- Transformations Applied List ----
+            st.markdown("##### ⚙️ Applied Rewrite Transformations")
             for change in rewrite["changes"]:
                 st.markdown(
                     f'<div class="success-card">✅ {change}</div>',
                     unsafe_allow_html=True,
                 )
+
             if rewrite["rewrite_score_est"] > 0:
                 st.success(
                     f"⚡ Applying these rewrites could add approximately "
                     f"**+{rewrite['rewrite_score_est']} points** to the performance score."
                 )
 
+            # ---- Copy-Friendly Code Block & Download Button ----
+            st.markdown("##### 📋 Copy Final Optimized SQL")
+            st.code(rewrite["rewritten"], language="sql")
+
+            dl_col1, dl_col2 = st.columns([1, 3])
+            with dl_col1:
+                st.download_button(
+                    label="💾 Download .sql File",
+                    data=rewrite["rewritten"],
+                    file_name="optimized_query.sql",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+
             # Live empirical multiset comparison on sample data
             if engine is not None and is_safe_for_live:
+                st.markdown("---")
                 if st.button("🧪 Validate Rewrite on Live Sample Data", key="btn_validate_data"):
                     from rewrite_validation import validate_rewrite_data
                     with st.spinner("Executing original and rewritten queries with row cap to verify multiset equivalence..."):
@@ -1153,7 +1166,8 @@ with tab_advanced:
                     for detail in data_val.details:
                         st.caption(f"• {detail}")
         else:
-            st.success("✅ No automatic rewrites needed — query is already well-structured.")
+            st.success("✅ **Nothing to rewrite:** Your query is already well-structured and optimal!")
+            st.code(rewrite["original"], language="sql")
 
         # ===================================================================
         # SECTION 4 — Live Query Execution Benchmarking
