@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -91,6 +90,7 @@ class SchemaInfo:
 
     database: str
     tables: dict[str, TableInfo] = field(default_factory=dict)  # Keyed by lowercase table name
+    source: str = "live DB"
 
     def get_table(self, table_name: str) -> TableInfo | None:
         """Retrieve table metadata by case-insensitive name."""
