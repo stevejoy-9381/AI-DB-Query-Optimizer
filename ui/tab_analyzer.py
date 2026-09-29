@@ -74,7 +74,13 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
 
     analyze_btn = st.button("⚡ Analyze Query", type="primary", use_container_width=True, key="btn_analyze_query")
 
-    if analyze_btn and query_input.strip():
+    if analyze_btn:
+        from utils.validation import validate_sql_input
+        is_valid, validation_err = validate_sql_input(query_input)
+        if not is_valid:
+            st.error(f"⚠️ {validation_err}")
+            return
+
         query = query_input.strip()
 
         with st.spinner("Running analysis pipeline…"):
