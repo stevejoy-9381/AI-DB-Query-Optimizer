@@ -27,6 +27,17 @@ class DBConfig:
     connect_timeout: int = 5
     read_timeout: int = 30
 
+    @classmethod
+    def from_env(cls) -> DBConfig:
+        import os
+        return cls(
+            host=os.getenv("MYSQL_HOST", "localhost"),
+            port=int(os.getenv("MYSQL_PORT", "3306")),
+            user=os.getenv("MYSQL_USER", "root"),
+            password=os.getenv("MYSQL_PASSWORD", ""),
+            database=os.getenv("MYSQL_DATABASE", "shop_db"),
+        )
+
     def to_display_dict(self) -> dict[str, Any]:
         """Return safe dictionary with password masked for UI display and logs."""
         return {

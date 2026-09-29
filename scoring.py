@@ -1,91 +1,36 @@
-"""
-scoring.py
-Query Performance Scoring Engine.
+"""scoring.py
+Query Performance Scoring Engine for MySQL 8.x.
 
-Assigns a 0–100 score to a SQL query based on its analysis report.
-Higher is better.
+Assigns an explainable 0–100 score to a SQL query based on its analysis report.
+Data-driven configuration loaded from scoring_rules.py.
+Supports table-size multipliers and indexed-column bonuses when schema is available,
+while maintaining 100% regression compatibility in offline mode.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import Any, Optional
 
+from scoring_rules import (
+    SCORE_RULES_CATALOG,
+    SCORE_RULES_DICT,
+    STATEMENT_SCORE_RULES,
+    ScoreRuleConfig,
+    get_table_size_multiplier,
+)
 
-# ---------------------------------------------------------------------------
-# Score rules
-# ---------------------------------------------------------------------------
-
+# Export legacy SCORE_RULES list of dicts for backward compatibility
 SCORE_RULES: list[dict] = [
-    # Penalties
-    {"code": "SELECT_STAR",       "delta": -25, "label": "SELECT * usage"},
-    {"code": "MISSING_WHERE",     "delta": -20, "label": "Missing WHERE clause"},
-    {"code": "EXCESSIVE_JOINS",   "delta": -15, "label": "Excessive JOINs (>2)"},
-    {"code": "JOIN_DETECTED",     "delta": -10, "label": "JOIN without verified index"},
-    {"code": "SUBQUERY_DETECTED", "delta": -10, "label": "Nested subquery"},
-    {"code": "MISSING_LIMIT",     "delta": -10, "label": "No LIMIT on large potential result"},
-    {"code": "LEADING_WILDCARD",  "delta": -10, "label": "Leading wildcard LIKE"},
-    {"code": "FUNCTION_ON_COLUMN","delta": -10, "label": "Function applied on WHERE column"},
-    {"code": "DISTINCT_WITH_JOIN","delta": -5,  "label": "SELECT DISTINCT with JOINs"},
-    {"code": "AGGREGATE_FULL_SCAN","delta": -10,"label": "Aggregate without filter"},
-    {"code": "CORRELATED_SUBQUERY", "delta": -15, "label": "Correlated subquery in SELECT/WHERE"},
-    {"code": "OR_DIFFERENT_COLUMNS", "delta": -10, "label": "OR across different columns"},
-    {"code": "IMPLICIT_TYPE_CONVERSION", "delta": -15, "label": "Implicit type conversion on column"},
-    {"code": "NOT_IN_SUBQUERY", "delta": -15, "label": "NOT IN with subquery (NULL trap)"},
-    {"code": "ORDER_BY_RAND", "delta": -20, "label": "ORDER BY RAND() full filesort"},
-    {"code": "UNINDEXED_ORDER_BY", "delta": -10, "label": "ORDER BY on unindexed column"},
-    {"code": "LARGE_OFFSET", "delta": -10, "label": "Deep OFFSET pagination scan"},
-    {"code": "MISSING_JOIN_CONDITION", "delta": -25, "label": "Missing JOIN condition (Cartesian product)"},
-    {"code": "NON_SARGABLE_ARITHMETIC", "delta": -10, "label": "Non-sargable arithmetic on column"},
-    {"code": "HAVING_AS_WHERE", "delta": -5, "label": "HAVING filtering non-aggregate column"},
-    {"code": "COUNT_DISTINCT", "delta": -5,  "label": "COUNT(DISTINCT) / column mismatch"},
-    {"code": "UNION_INSTEAD_OF_UNION_ALL", "delta": -10, "label": "UNION instead of UNION ALL"},
-    {"code": "UPDATE_WITHOUT_WHERE", "delta": -50, "label": "UPDATE without WHERE clause (Critical)"},
-    {"code": "DELETE_WITHOUT_WHERE", "delta": -50, "label": "DELETE without WHERE clause (Critical)"},
-    {"code": "UPDATE_DELETE_UNINDEXED_WHERE", "delta": -20, "label": "Unindexed WHERE filter (Lock escalation)"},
-    {"code": "INSERT_SINGLE_ROW", "delta": -5, "label": "Single-row INSERT (Prefer bulk)"},
-    {"code": "INSERT_SELECT_UNBOUNDED", "delta": -20, "label": "Unbounded INSERT...SELECT (Massive write)"},
-    {"code": "CTE_MULTIPLY_REFERENCED", "delta": -10, "label": "CTE evaluated multiple times"},
-    {"code": "WINDOW_WITHOUT_PARTITION", "delta": -10, "label": "Window function without PARTITION BY"},
-    # Bonuses
-    {"code": "HAS_WHERE",         "delta": +10, "label": "WHERE clause present"},
-    {"code": "HAS_LIMIT",         "delta": +10, "label": "LIMIT clause present"},
-    {"code": "HAS_GROUP_BY",      "delta": +5,  "label": "GROUP BY used"},
-    {"code": "HAS_ORDER_BY",      "delta": +5,  "label": "ORDER BY used"},
-    {"code": "SPECIFIC_COLUMNS",  "delta": +10, "label": "Specific columns selected"},
-    {"code": "HAS_FILTER_COLS",   "delta": +5,  "label": "Filterable columns identified"},
-    {"code": "BULK_INSERT",       "delta": +15, "label": "Bulk multi-row INSERT"},
+    {
+        "code": r.code,
+        "delta": r.delta,
+        "label": r.label,
+        "severity": r.severity,
+        "explanation": r.explanation,
+    }
+    for r in SCORE_RULES_CATALOG
 ]
-
-# Statement-specific rule overrides for focused scoring
-STATEMENT_RULES: dict[str, list[dict]] = {
-    "UPDATE": [
-        {"code": "UPDATE_WITHOUT_WHERE", "delta": -50, "label": "UPDATE without WHERE (Critical)"},
-        {"code": "UPDATE_DELETE_UNINDEXED_WHERE", "delta": -20, "label": "Unindexed WHERE (Lock contention risk)"},
-        {"code": "NON_SARGABLE_ARITHMETIC", "delta": -10, "label": "Non-sargable arithmetic in WHERE"},
-        {"code": "FUNCTION_ON_COLUMN", "delta": -10, "label": "Function on WHERE column"},
-        {"code": "HAS_WHERE", "delta": +15, "label": "Specific row filter present"},
-        {"code": "HAS_LIMIT", "delta": +5, "label": "LIMIT clause caps row updates"},
-    ],
-    "DELETE": [
-        {"code": "DELETE_WITHOUT_WHERE", "delta": -50, "label": "DELETE without WHERE (Critical)"},
-        {"code": "UPDATE_DELETE_UNINDEXED_WHERE", "delta": -20, "label": "Unindexed WHERE (Lock contention risk)"},
-        {"code": "NON_SARGABLE_ARITHMETIC", "delta": -10, "label": "Non-sargable arithmetic in WHERE"},
-        {"code": "FUNCTION_ON_COLUMN", "delta": -10, "label": "Function on WHERE column"},
-        {"code": "HAS_WHERE", "delta": +15, "label": "Specific row filter present"},
-        {"code": "HAS_LIMIT", "delta": +5, "label": "LIMIT clause caps deletions"},
-    ],
-    "INSERT": [
-        {"code": "INSERT_SELECT_UNBOUNDED", "delta": -25, "label": "Unbounded INSERT...SELECT transaction"},
-        {"code": "INSERT_SINGLE_ROW", "delta": -10, "label": "Single-row INSERT loop overhead"},
-        {"code": "BULK_INSERT", "delta": +15, "label": "Multi-row batch INSERT"},
-        {"code": "HAS_WHERE", "delta": +10, "label": "Bounded source query filter"},
-    ],
-    "INSERT...SELECT": [
-        {"code": "INSERT_SELECT_UNBOUNDED", "delta": -25, "label": "Unbounded INSERT...SELECT transaction"},
-        {"code": "SELECT_STAR", "delta": -15, "label": "SELECT * in INSERT source"},
-        {"code": "HAS_WHERE", "delta": +15, "label": "Source table filtered with WHERE"},
-        {"code": "HAS_LIMIT", "delta": +10, "label": "LIMIT caps transaction batch size"},
-    ],
-}
 
 COST_THRESHOLDS = {
     "LOW":    (80, 100),
@@ -101,6 +46,8 @@ class ScoreBreakdown:
     cost_estimate: str = "MEDIUM"
     rows_scanned_estimate: str = "Unknown"
     table_row_counts: dict[str, int] = field(default_factory=dict)
+    unclipped_score: int = 100
+    table_multiplier: float = 1.0
 
 
 def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
@@ -119,7 +66,41 @@ def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
     issue_codes   = {i["code"] for i in analysis.get("issues",   [])}
     warning_codes = {w["code"] for w in analysis.get("warnings", [])}
     all_codes = issue_codes | warning_codes
-    stmt_type = analysis.get("statement_type", "SELECT").upper()
+    stmt_type = analysis.get("statement_type") or analysis.get("query_type", "SELECT")
+    stmt_type = stmt_type.upper()
+
+    # Determine table multiplier and row stats when schema is known
+    table_multiplier = 1.0
+    max_table_rows: Optional[int] = None
+    row_counts: dict[str, int] = {}
+    has_indexed_filter = False
+
+    if schema is not None and hasattr(schema, "tables"):
+        query_tables = analysis.get("tables", [])
+        if not query_tables and hasattr(analysis, "get"):
+            # Try to get from filter columns or schema tables
+            query_tables = list(schema.tables.keys())
+
+        matched_tables = []
+        for tbl_name in query_tables:
+            clean_name = tbl_name.split(".")[-1].strip("`\"' ").lower()
+            t_info = schema.get_table(clean_name)
+            if t_info:
+                matched_tables.append(t_info)
+                row_counts[t_info.name] = t_info.estimated_rows
+
+        if matched_tables:
+            max_table_rows = max(t.estimated_rows for t in matched_tables)
+            table_multiplier = get_table_size_multiplier(max_table_rows)
+
+            # Check if any filter column has a covering/prefix index
+            filter_cols = [c.lower() for c in analysis.get("filter_columns", [])]
+            for t_info in matched_tables:
+                indexes_iterable = t_info.indexes.values() if isinstance(t_info.indexes, dict) else t_info.indexes
+                for idx in indexes_iterable:
+                    if idx.columns and idx.columns[0].lower() in filter_cols:
+                        has_indexed_filter = True
+                        break
 
     # Positive signals derived from analysis flags
     positive_flags: set[str] = set()
@@ -137,51 +118,78 @@ def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
         positive_flags.add("HAS_FILTER_COLS")
     if analysis.get("insert_row_count", 0) and analysis.get("insert_row_count", 0) > 1:
         positive_flags.add("BULK_INSERT")
+    if has_indexed_filter:
+        positive_flags.add("INDEXED_FILTER_COLUMN")
 
-    score = 100
+    # Select rules catalog based on statement type
+    rule_configs = STATEMENT_SCORE_RULES.get(stmt_type, SCORE_RULES_CATALOG)
+
+    unclipped_score = 100
     applied: list[dict] = []
 
-    # Choose statement-specific rules or fallback to full rules
-    rules_to_use = STATEMENT_RULES.get(stmt_type, SCORE_RULES)
-
-    for rule in rules_to_use:
-        code  = rule["code"]
-        delta = rule["delta"]
-        label = rule["label"]
+    for rule in rule_configs:
+        code  = rule.code
+        base_delta = rule.delta
+        label = rule.label
+        explanation = rule.explanation
 
         triggered = False
-        if delta < 0 and code in all_codes:
+        if base_delta < 0 and code in all_codes:
             triggered = True
-        elif delta > 0 and code in positive_flags:
+        elif base_delta > 0 and code in positive_flags:
             triggered = True
 
         if triggered:
-            score += delta
-            applied.append({"label": label, "delta": delta, "code": code})
+            # Apply multiplier ONLY when schema is present and on negative penalties
+            if schema is not None and base_delta < 0:
+                final_delta = round(base_delta * table_multiplier)
+            else:
+                final_delta = base_delta
 
-    score = max(0, min(100, score))
+            unclipped_score += final_delta
+            applied.append({
+                "code": code,
+                "label": label,
+                "delta": final_delta,
+                "severity": rule.severity,
+                "reason": explanation,
+            })
 
-    # Cost estimation
+    score = max(0, min(100, unclipped_score))
+
+    # Cost category
     if score >= 80:
         cost = "LOW"
-        rows = "~1K–10K rows"
     elif score >= 50:
         cost = "MEDIUM"
-        rows = "~10K–500K rows"
     else:
         cost = "HIGH"
-        rows = "~1M+ rows"
 
-    row_counts = {}
-    if schema is not None and hasattr(schema, "tables"):
-        row_counts = {t.name: t.estimated_rows for t in schema.tables.values()}
+    # Rows scanned estimate
+    if schema is not None and max_table_rows is not None and max_table_rows > 0:
+        if score >= 80:
+            est_rows = max(1, round(max_table_rows * 0.05))
+        elif score >= 50:
+            est_rows = max(1, round(max_table_rows * 0.35))
+        else:
+            est_rows = max_table_rows
+        rows_str = f"~{est_rows:,} rows (computed from table stats)"
+    else:
+        if score >= 80:
+            rows_str = "~1K–10K rows (rough estimate)"
+        elif score >= 50:
+            rows_str = "~10K–500K rows (rough estimate)"
+        else:
+            rows_str = "~1M+ rows (rough estimate)"
 
     return ScoreBreakdown(
         total=score,
         breakdown=applied,
         cost_estimate=cost,
-        rows_scanned_estimate=rows,
+        rows_scanned_estimate=rows_str,
         table_row_counts=row_counts,
+        unclipped_score=unclipped_score,
+        table_multiplier=table_multiplier,
     )
 
 
@@ -196,11 +204,12 @@ def simulate_optimized_score(analysis: dict) -> int:
     optimized_issues = [
         i for i in analysis.get("issues", [])
         if i["code"] not in ("SELECT_STAR", "MISSING_WHERE", "MISSING_LIMIT",
-                              "SUBQUERY_DETECTED")
+                             "SUBQUERY_DETECTED", "UPDATE_WITHOUT_WHERE",
+                             "DELETE_WITHOUT_WHERE", "ORDER_BY_RAND")
     ]
     optimized_warnings = [
         w for w in analysis.get("warnings", [])
-        if w["code"] not in ("LEADING_WILDCARD", "FUNCTION_ON_COLUMN")
+        if w["code"] not in ("LEADING_WILDCARD", "FUNCTION_ON_COLUMN", "UNION_INSTEAD_OF_UNION_ALL")
     ]
     optimized_analysis["issues"] = optimized_issues
     optimized_analysis["warnings"] = optimized_warnings
@@ -208,4 +217,5 @@ def simulate_optimized_score(analysis: dict) -> int:
     optimized_analysis["has_where"] = True
     optimized_analysis["has_limit"] = True
 
-    return compute_score(optimized_analysis).total
+    sim_breakdown = compute_score(optimized_analysis)
+    return sim_breakdown.total

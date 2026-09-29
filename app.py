@@ -495,6 +495,49 @@ with tab_analyze:
             )
             st.plotly_chart(fig_pat, use_container_width=True)
 
+        # ---- Row 2b: Score Breakdown Waterfall Chart ----
+        st.markdown('<div class="section-header">🧮 Explainable Score Breakdown</div>', unsafe_allow_html=True)
+        if score_result.breakdown:
+            labels = ["Base Score"] + [b["label"] for b in score_result.breakdown]
+            deltas = [100] + [b["delta"] for b in score_result.breakdown]
+            measures = ["absolute"] + ["relative"] * len(score_result.breakdown)
+
+            fig_waterfall = go.Figure(go.Waterfall(
+                name="Score Walk",
+                orientation="v",
+                measure=measures,
+                x=labels,
+                textposition="outside",
+                text=[f"{d:+d}" if i > 0 else f"{d}" for i, d in enumerate(deltas)],
+                y=deltas,
+                connector={"line": {"color": "#555"}},
+                decreasing={"marker": {"color": "#e74c3c"}},
+                increasing={"marker": {"color": "#2ecc71"}},
+                totals={"marker": {"color": "#3498db"}},
+            ))
+            fig_waterfall.update_layout(
+                height=320,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                yaxis=dict(gridcolor="#333", title="Performance Points"),
+                xaxis=dict(gridcolor="#333", tickangle=-20),
+                margin=dict(t=30, b=50, l=30, r=30),
+            )
+            st.plotly_chart(fig_waterfall, use_container_width=True)
+
+            with st.expander("📋 Detailed Scoring Audit Trail"):
+                breakdown_df = pd.DataFrame([
+                    {
+                        "Rule": b["label"],
+                        "Impact": f"{b['delta']:+d} pts",
+                        "Severity": b.get("severity", "MEDIUM"),
+                        "Reason": b.get("reason", ""),
+                    }
+                    for b in score_result.breakdown
+                ])
+                st.dataframe(breakdown_df, use_container_width=True, hide_index=True)
+
         st.markdown("---")
 
         # ---- Row 3: Issues + Formatted SQL ----
