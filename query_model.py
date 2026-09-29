@@ -188,7 +188,7 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
             col_name = col_node.name if col_node else str(like_node.this)
             expr_val = like_node.expression.this if hasattr(like_node.expression, "this") else str(like_node.expression)
             pattern_str = str(expr_val).strip("'\"")
-            if pattern_str.startswith("%"):
+            if pattern_str.startswith("%") or pattern_str.startswith("_"):
                 features.wildcard_likes.append(col_name)
 
         # Detect comparison predicates and function wrapping

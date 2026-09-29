@@ -348,6 +348,20 @@ def _analyze_with_features(query: str, features: QueryFeatures, schema: SchemaIn
             "message": "Aggregate function with no GROUP BY or WHERE — full scan required.",
         })
 
+    # 10. Plugin-style anti-pattern detectors
+    from detectors.registry import run_all_detectors
+    plugin_findings = run_all_detectors(query, features, schema=schema)
+    existing_codes = {i["code"] for i in issues} | {w["code"] for w in warnings}
+    for finding in plugin_findings:
+        if finding.code in existing_codes:
+            continue
+        existing_codes.add(finding.code)
+        entry = finding.to_dict()
+        if finding.severity == "HIGH":
+            issues.append(entry)
+        else:
+            warnings.append(entry)
+
     # Complexity classification
     if subquery_count > 0 or join_count > 2:
         complexity = "Complex"

@@ -211,6 +211,26 @@ def generate_optimizations(query: str, analysis: dict) -> list[dict]:
     if "AGGREGATE_FULL_SCAN" in all_codes:
         recs.append(_aggregate_full_scan_fix())
 
+    # Plugin-style detector recommendations
+    for item in analysis.get("issues", []) + analysis.get("warnings", []):
+        code = item.get("code")
+        if code in ("CORRELATED_SUBQUERY", "OR_DIFFERENT_COLUMNS", "IMPLICIT_TYPE_CONVERSION",
+                    "NOT_IN_SUBQUERY", "ORDER_BY_RAND", "UNINDEXED_ORDER_BY", "LARGE_OFFSET",
+                    "MISSING_JOIN_CONDITION", "NON_SARGABLE_ARITHMETIC", "HAVING_AS_WHERE",
+                    "COUNT_DISTINCT", "UNION_INSTEAD_OF_UNION_ALL"):
+            title = code.replace("_", " ").title()
+            priority = item.get("severity", "MEDIUM")
+            desc = item.get("message", "")
+            example = item.get("fix_example", "")
+            # Avoid duplicate recommendations
+            if not any(r["title"] == title for r in recs):
+                recs.append({
+                    "title": title,
+                    "priority": priority,
+                    "description": desc,
+                    "example": example,
+                })
+
     # Sort: HIGH first, then MEDIUM, then LOW
     priority_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
     recs.sort(key=lambda r: priority_order.get(r["priority"], 99))

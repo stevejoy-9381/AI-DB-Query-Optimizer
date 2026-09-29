@@ -109,3 +109,19 @@ query,description,category
 "SELECT AVG(total_amount) FROM orders","Advanced aggregate average on orders",Good
 "SELECT MAX(salary) FROM employees","Advanced aggregate max salary on employees",Good
 "SELECT MIN(price) FROM products","Advanced aggregate min price on products",Good
+"SELECT c.name, (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) AS order_count FROM customers c;","Correlated subquery in SELECT projection",Anti-pattern
+"SELECT id, total FROM orders WHERE customer_id = 42 OR status = 'pending';","OR predicate spanning across different columns",Anti-pattern
+"SELECT id, name FROM customers WHERE phone = 1234567890;","Implicit type conversion comparing varchar phone to numeric literal",Anti-pattern
+"SELECT id, name FROM customers WHERE id NOT IN (SELECT customer_id FROM orders);","NOT IN subquery with NULL risk and slow unnesting",Anti-pattern
+"SELECT id, name FROM products ORDER BY RAND() LIMIT 5;","ORDER BY RAND() forcing full table scan and filesort",Anti-pattern
+"SELECT id, total FROM orders ORDER BY id ASC LIMIT 20 OFFSET 5000;","Deep OFFSET pagination scanning and discarding 5000 rows",Anti-pattern
+"SELECT c.name, o.id FROM customers c CROSS JOIN orders o;","Accidental Cartesian product with missing join condition",Anti-pattern
+"SELECT id, price FROM products WHERE price + 15.00 > 100.00;","Non-sargable arithmetic preventing index range scan",Anti-pattern
+"SELECT status, COUNT(*) FROM orders GROUP BY status HAVING status = 'completed';","HAVING filtering non-aggregate column instead of WHERE",Anti-pattern
+"SELECT COUNT(DISTINCT customer_id) FROM orders;","COUNT(DISTINCT) requiring temporary hash table on large orders",Moderate
+"SELECT id FROM orders WHERE status = 'shipped' UNION SELECT id FROM orders WHERE status = 'delivered';","UNION forcing temporary table deduplication instead of UNION ALL",Anti-pattern
+"SELECT id, name FROM customers ORDER BY name LIMIT 10;","ORDER BY on unindexed column requiring temporary filesort",Moderate
+"SELECT id, total FROM orders WHERE id > 5000 ORDER BY id ASC LIMIT 20;","Keyset / cursor pagination avoiding deep OFFSET overhead",Good
+"SELECT c.id, c.name FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);","Safe NOT EXISTS rewrite replacing dangerous NOT IN",Good
+"SELECT id FROM orders WHERE status = 'shipped' UNION ALL SELECT id FROM orders WHERE status = 'delivered';","Streaming UNION ALL avoiding temporary filesort",Good
+
