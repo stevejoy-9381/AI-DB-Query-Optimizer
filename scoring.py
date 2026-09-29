@@ -48,15 +48,18 @@ class ScoreBreakdown:
     breakdown: list[dict] = field(default_factory=list)
     cost_estimate: str = "MEDIUM"
     rows_scanned_estimate: str = "Unknown"
+    table_row_counts: dict[str, int] = field(default_factory=dict)
 
 
-def compute_score(analysis: dict) -> ScoreBreakdown:
+def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
     """
     Compute a performance score from an analysis dict (produced by analyzer.analyze_query).
 
     Parameters
     ----------
     analysis : dict  — output of analyzer.analyze_query()
+    schema   : SchemaInfo | None — optional schema metadata for row-count and cardinality adjustments
+
 
     Returns
     -------
@@ -112,11 +115,16 @@ def compute_score(analysis: dict) -> ScoreBreakdown:
         cost = "HIGH"
         rows = "~1M+ rows"
 
+    row_counts = {}
+    if schema is not None and hasattr(schema, "tables"):
+        row_counts = {t.name: t.estimated_rows for t in schema.tables.values()}
+
     return ScoreBreakdown(
         total=score,
         breakdown=applied,
         cost_estimate=cost,
         rows_scanned_estimate=rows,
+        table_row_counts=row_counts,
     )
 
 

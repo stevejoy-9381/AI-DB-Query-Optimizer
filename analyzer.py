@@ -5,10 +5,17 @@ Detects inefficient SQL patterns like SELECT *, missing WHERE clauses,
 unindexed JOINs, nested subqueries, and oversized result sets.
 """
 
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
+
 import sqlparse
 from sqlparse.sql import IdentifierList, Identifier, Where
 from sqlparse.tokens import Keyword, DML
+
+if TYPE_CHECKING:
+    from db.schema import SchemaInfo
 
 
 # ---------------------------------------------------------------------------
@@ -129,9 +136,10 @@ def _detect_query_type(query_upper: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def analyze_query(query: str) -> dict:
+def analyze_query(query: str, schema: SchemaInfo | None = None) -> dict:
     """
     Analyze a SQL query and return a structured report.
+    If schema is provided, validates referenced tables and columns against real metadata.
 
     Returns
     -------
@@ -139,10 +147,13 @@ def analyze_query(query: str) -> dict:
         query_type, issues, warnings, filter_columns,
         join_count, subquery_count, has_aggregation,
         has_group_by, has_order_by, has_limit, has_distinct,
-        is_complex
+        complexity, select_star, has_where, schema_validated,
+        unknown_tables, unknown_columns
     """
     q = _normalize(query)
     issues = []
+    unknown_tables: list[str] = []
+    unknown_columns: list[str] = []
     warnings = []
 
     query_type = _detect_query_type(q)
@@ -237,6 +248,46 @@ def analyze_query(query: str) -> dict:
     else:
         complexity = "Simple"
 
+    # ---- Schema-Aware Validation (when schema is provided) ----
+    if schema is not None:
+        parsed_stmts = sqlparse.parse(query)
+        parsed = parsed_stmts[0] if parsed_stmts else None
+        extracted_tables = _extract_tables(parsed) if parsed else []
+        for tbl in extracted_tables:
+            clean_tbl = tbl.split(".")[-1].strip("`\"' ")
+            if clean_tbl and schema.get_table(clean_tbl) is None:
+                if clean_tbl not in unknown_tables:
+                    unknown_tables.append(clean_tbl)
+                    issues.append({
+                        "code": "UNKNOWN_TABLE",
+                        "severity": "HIGH",
+                        "message": f"Table `{clean_tbl}` does not exist in schema `{schema.database}`.",
+                    })
+
+        # Check explicit column qualifiers table.col or alias.col
+        alias_map: dict[str, str] = {}
+        for m in re.finditer(r"\b(?:FROM|JOIN)\s+([\w.]+)\s+(?:AS\s+)?([\w]+)", query, re.IGNORECASE):
+            t_ref = m.group(1).split(".")[-1].lower()
+            a_ref = m.group(2).lower()
+            if a_ref.upper() not in ("WHERE", "ON", "JOIN", "INNER", "LEFT", "RIGHT", "GROUP", "ORDER", "LIMIT"):
+                alias_map[a_ref] = t_ref
+
+        for m in re.finditer(r"\b([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\b", query):
+            prefix = m.group(1).lower()
+            col = m.group(2).lower()
+            resolved_table = alias_map.get(prefix, prefix)
+            tbl_info = schema.get_table(resolved_table)
+            if tbl_info and col not in ("*",):
+                if tbl_info.get_column(col) is None:
+                    col_ref = f"{resolved_table}.{col}"
+                    if col_ref not in unknown_columns:
+                        unknown_columns.append(col_ref)
+                        issues.append({
+                            "code": "UNKNOWN_COLUMN",
+                            "severity": "HIGH",
+                            "message": f"Column `{col}` does not exist in table `{resolved_table}`.",
+                        })
+
     return {
         "query_type": query_type,
         "complexity": complexity,
@@ -252,4 +303,7 @@ def analyze_query(query: str) -> dict:
         "has_distinct": distinct,
         "select_star": _has_select_star(q),
         "has_where": _has_where_clause(q),
+        "schema_validated": schema is not None,
+        "unknown_tables": unknown_tables,
+        "unknown_columns": unknown_columns,
     }

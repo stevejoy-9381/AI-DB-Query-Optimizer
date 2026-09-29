@@ -20,7 +20,12 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from typing import TYPE_CHECKING
+
 from config import Dialect, get_dialect_config
+
+if TYPE_CHECKING:
+    from db.schema import SchemaInfo
 
 logger = logging.getLogger(__name__)
 
@@ -225,14 +230,24 @@ def _composite_candidate(query: str) -> tuple[str, list[str]] | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def _is_index_redundant(tbl: str, cols: list[str], schema: SchemaInfo | None) -> tuple[bool, str]:
+    """Check if an index for cols on tbl is already covered by schema metadata."""
+    if schema is None or not cols:
+        return False, ""
+    table_info = schema.get_table(tbl)
+    if table_info is None:
+        return False, ""
+    is_covered, existing_idx, reason = table_info.has_index_for_prefix(cols)
+    if is_covered:
+        return True, reason
+    return False, ""
+
 
 def generate_index_recommendations(
     query: str,
     analysis: dict,
     dialect: Dialect | str | None = None,
+    schema: SchemaInfo | None = None,
 ) -> list[dict]:
     """
     Generate concrete, valid MySQL 8.x CREATE INDEX recommendations.
@@ -284,6 +299,12 @@ def generate_index_recommendations(
             )
             index_type = "B-tree (Single Column)"
 
+        # Check schema to avoid recommending an index that already exists or is prefix-covered
+        redundant, red_reason = _is_index_redundant(tbl, [col], schema)
+        if redundant:
+            logger.info("Skipping recommendation on %s(%s): %s", tbl, col, red_reason)
+            continue
+
         if idx_name not in seen_names:
             seen_names.add(idx_name)
             recs.append({
@@ -305,7 +326,10 @@ def generate_index_recommendations(
             f"CREATE INDEX {idx_name}\n"
             f"    ON {tbl}({col_def});"
         )
-        if idx_name not in seen_names:
+        redundant, red_reason = _is_index_redundant(tbl, cols, schema)
+        if redundant:
+            logger.info("Skipping composite recommendation on %s(%s): %s", tbl, cols, red_reason)
+        elif idx_name not in seen_names:
             seen_names.add(idx_name)
             recs.append({
                 "index_name": idx_name,
@@ -355,7 +379,10 @@ def generate_index_recommendations(
             reason = "Covering index with non-key payload columns for PostgreSQL."
             index_type = "Covering Index (INCLUDE)"
 
-        if idx_name not in seen_names:
+        redundant, red_reason = _is_index_redundant(tbl, all_covering_cols, schema)
+        if redundant:
+            logger.info("Skipping covering index recommendation on %s(%s): %s", tbl, all_covering_cols, red_reason)
+        elif idx_name not in seen_names:
             seen_names.add(idx_name)
             recs.append({
                 "index_name": idx_name,

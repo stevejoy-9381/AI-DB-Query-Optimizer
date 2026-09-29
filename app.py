@@ -40,6 +40,13 @@ from db.connection import (
     close_engine,
 )
 from db.explain import run_explain
+from db.schema import SchemaInfo, load_schema_from_db
+
+
+@st.cache_data(ttl=600)
+def _get_cached_schema(_engine, db_name: str) -> SchemaInfo:
+    """Load and cache database schema metadata for 10 minutes."""
+    return load_schema_from_db(_engine, db_name)
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -62,6 +69,8 @@ if "db_engine" not in st.session_state:
     st.session_state["db_engine"] = None
 if "db_config" not in st.session_state:
     st.session_state["db_config"] = None
+if "schema_info" not in st.session_state:
+    st.session_state["schema_info"] = None
 
 # ---------------------------------------------------------------------------
 # Custom CSS
@@ -210,8 +219,28 @@ with st.sidebar:
                     close_engine(st.session_state.get("db_engine"))
                     st.session_state["db_engine"] = None
                     st.session_state["db_config"] = None
+                    st.session_state["schema_info"] = None
                     st.info("Disconnected from database.")
                     st.rerun()
+
+    # Load and display schema if connected
+    if st.session_state.get("db_engine") is not None and st.session_state.get("db_config"):
+        curr_db = st.session_state["db_config"].get("database", "")
+        if curr_db:
+            try:
+                schema_info = _get_cached_schema(st.session_state["db_engine"], curr_db)
+                st.session_state["schema_info"] = schema_info
+                with st.expander(f"📚 Schema: `{curr_db}` ({len(schema_info.tables)} tables)", expanded=False):
+                    if st.button("🔄 Refresh Schema", use_container_width=True):
+                        _get_cached_schema.clear()
+                        st.rerun()
+                    for t_name, t_meta in sorted(schema_info.tables.items()):
+                        st.markdown(f"**`{t_meta.name}`** — `{t_meta.estimated_rows:,}` rows")
+                        if t_meta.indexes:
+                            idx_str = ", ".join(f"`{idx.name}` ({', '.join(idx.columns)})" for idx in t_meta.indexes.values())
+                            st.caption(f"Indexes: {idx_str}")
+            except Exception as schema_err:
+                st.caption(f"⚠️ Schema load notice: {schema_err}")
 
     st.markdown("---")
 
@@ -286,11 +315,12 @@ with tab_analyze:
 
         # ---- Run analysis pipeline ----
         with st.spinner("Running analysis pipeline…"):
-            analysis      = analyze_query(query)
-            score_result  = compute_score(analysis)
+            active_schema = st.session_state.get("schema_info")
+            analysis      = analyze_query(query, schema=active_schema)
+            score_result  = compute_score(analysis, schema=active_schema)
             opt_score     = simulate_optimized_score(analysis)
             optimizations = generate_optimizations(query, analysis)
-            index_recs    = generate_index_recommendations(query, analysis)
+            index_recs    = generate_index_recommendations(query, analysis, schema=active_schema)
             ai_insight    = generate_ai_insight(query, analysis, score_result.total)
             formatted_sql = format_sql(query)
 
