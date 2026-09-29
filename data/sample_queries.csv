@@ -1,0 +1,111 @@
+query,description,category
+"SELECT * FROM users","Fetch all columns from users table",Anti-pattern
+"SELECT name FROM users WHERE id = 10","Fetch specific column with filter",Good
+"SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id","Select star with join",Anti-pattern
+"SELECT id, total FROM orders WHERE status = 'pending' LIMIT 50","Filtered and limited query",Good
+"SELECT * FROM products","Full table scan on products",Anti-pattern
+"SELECT COUNT(*) FROM orders","Count without filter",Moderate
+"SELECT name, email FROM users WHERE status = 'active' ORDER BY created_at DESC LIMIT 100","Well-optimized select",Good
+"SELECT * FROM orders WHERE customer_id = 10","Select star with filter",Moderate
+"SELECT o.id, c.name FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.status = 'shipped'","Join with specific columns",Good
+"SELECT * FROM logs","Full scan on large table",Anti-pattern
+"SELECT AVG(salary) FROM employees","Aggregate full scan",Moderate
+"SELECT AVG(salary) FROM employees WHERE department = 'Engineering'","Filtered aggregate",Good
+"SELECT * FROM users WHERE email LIKE '%@gmail.com'","Leading wildcard like",Anti-pattern
+"SELECT id FROM users WHERE email LIKE 'john%'","Trailing wildcard like",Good
+"SELECT u.name FROM users u WHERE u.id IN (SELECT customer_id FROM orders WHERE total > 1000)","Correlated subquery",Anti-pattern
+"SELECT u.name FROM users u JOIN orders o ON u.id = o.customer_id WHERE o.total > 1000","Subquery rewritten as join",Good
+"SELECT DISTINCT product_id FROM order_items JOIN orders ON order_items.order_id = orders.id","Distinct with join",Moderate
+"SELECT id, name, price FROM products WHERE category_id = 5 AND price < 100 ORDER BY price LIMIT 20","Composite filter with order and limit",Good
+"SELECT * FROM sessions WHERE UPPER(status) = 'ACTIVE'","Function on column in where",Anti-pattern
+"SELECT * FROM invoices JOIN line_items ON invoices.id = line_items.invoice_id JOIN products ON line_items.product_id = products.id JOIN customers ON invoices.customer_id = customers.id","Excessive joins",Anti-pattern
+"SELECT name, email, phone FROM customers WHERE region = 'WEST' AND active = 1 LIMIT 200","Multi-condition filter with limit",Good
+"SELECT COUNT(DISTINCT user_id) FROM page_views WHERE visited_at > '2024-01-01'","Count distinct with date filter",Good
+"SELECT * FROM audit_log","Full scan on audit log",Anti-pattern
+"SELECT department, COUNT(*) as headcount FROM employees GROUP BY department ORDER BY headcount DESC","Group by with aggregate and order",Good
+"SELECT * FROM orders WHERE created_at BETWEEN '2024-01-01' AND '2024-12-31'","Select star with date range",Moderate
+"SELECT * FROM customers","Fetch all columns from customers table",Anti-pattern
+"SELECT name, email FROM customers","Fetch specific columns from customers table",Good
+"SELECT * FROM products WHERE price > 500","Full scan with filter on products",Moderate
+"SELECT * FROM employees WHERE department = 'Sales'","Full scan with department filter",Moderate
+"SELECT * FROM orders WHERE status = 'Delivered'","Full scan with status filter",Moderate
+"SELECT * FROM products ORDER BY price DESC","Full scan with order by price",Moderate
+"SELECT * FROM customers ORDER BY created_at","Full scan with order by created_at",Moderate
+"SELECT * FROM orders LIMIT 10","Full scan with limit",Moderate
+"SELECT COUNT(*) FROM customers","Aggregate count on customers",Moderate
+"SELECT AVG(price) FROM products","Aggregate average on products",Moderate
+"SELECT * FROM customers WHERE city = 'Hyderabad'","Filter by city",Good
+"SELECT * FROM products WHERE category = 'Electronics'","Filter by category",Good
+"SELECT * FROM employees WHERE salary > 50000","Filter by salary",Good
+"SELECT * FROM orders WHERE order_date > '2024-01-01'","Filter by order date",Good
+"SELECT * FROM orders WHERE total_amount BETWEEN 1000 AND 5000","Filter by total amount range",Good
+"SELECT * FROM customers WHERE name LIKE 'A%'","Filter by name prefix",Good
+"SELECT * FROM products WHERE price < 1000","Filter by price less than 1000",Good
+"SELECT * FROM employees WHERE hire_date > '2023-01-01'","Filter by hire date",Good
+"SELECT * FROM products WHERE stock < 50","Filter by stock less than 50",Good
+"SELECT * FROM orders WHERE status != 'Cancelled'","Filter by status not cancelled",Good
+"SELECT COUNT(*) FROM orders","Aggregate count on orders",Moderate
+"SELECT SUM(total_amount) FROM orders","Aggregate sum on orders",Moderate
+"SELECT AVG(salary) FROM employees","Aggregate average on employees",Moderate
+"SELECT MAX(price) FROM products","Aggregate max price on products",Moderate
+"SELECT MIN(price) FROM products","Aggregate min price on products",Moderate
+"SELECT department, COUNT(*) FROM employees GROUP BY department","Group by department with count",Good
+"SELECT category, AVG(price) FROM products GROUP BY category","Group by category with average price",Good
+"SELECT city, COUNT(*) FROM customers GROUP BY city","Group by city with count",Good
+"SELECT status, COUNT(*) FROM orders GROUP BY status","Group by status with count",Good
+"SELECT department, SUM(salary) FROM employees GROUP BY department","Group by department with sum salary",Good
+"SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id","Join orders and customers",Moderate
+"SELECT * FROM order_items JOIN products ON order_items.product_id = products.id","Join order_items and products",Moderate
+"SELECT customers.name, orders.total_amount FROM customers JOIN orders ON customers.id = orders.customer_id","Join customers and orders with specific columns",Good
+"SELECT products.name, order_items.quantity FROM products JOIN order_items ON products.id = order_items.product_id","Join products and order_items with specific columns",Good
+"SELECT customers.name, payments.amount FROM customers JOIN payments ON customers.id = payments.customer_id","Join customers and payments with specific columns",Good
+"SELECT employees.name, orders.id FROM employees JOIN orders ON employees.id = orders.employee_id","Join employees and orders with specific columns",Good
+"SELECT products.name, SUM(order_items.quantity) FROM order_items JOIN products ON order_items.product_id = products.id GROUP BY products.name","Join and group by products name with sum quantity",Good
+"SELECT customers.name, COUNT(orders.id) FROM customers LEFT JOIN orders ON customers.id = orders.customer_id GROUP BY customers.name","Left join customers and orders with group by",Good
+"SELECT products.name, orders.order_date FROM products JOIN order_items ON products.id = order_items.product_id JOIN orders ON order_items.order_id = orders.id","Join products, order_items, and orders with order date",Good
+"SELECT customers.name, SUM(payments.amount) FROM customers JOIN payments ON customers.id = payments.customer_id GROUP BY customers.name","Join customers and payments with group by sum amount",Good
+"SELECT * FROM products WHERE price > (SELECT AVG(price) FROM products)","Subquery filter on products",Moderate
+"SELECT * FROM employees WHERE salary > (SELECT AVG(salary) FROM employees)","Subquery filter on employees",Moderate
+"SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders)","Subquery IN on customers",Moderate
+"SELECT * FROM products WHERE id IN (SELECT product_id FROM order_items)","Subquery IN on products",Moderate
+"SELECT * FROM orders WHERE total_amount > (SELECT AVG(total_amount) FROM orders)","Subquery filter on orders total amount",Moderate
+"SELECT name FROM customers WHERE id = (SELECT customer_id FROM orders LIMIT 1)","Subquery with limit on customers",Moderate
+"SELECT * FROM employees WHERE department_id IN (SELECT id FROM departments)","Subquery IN on employees department",Moderate
+"SELECT * FROM products WHERE category_id IN (SELECT id FROM categories)","Subquery IN on products category",Moderate
+"SELECT * FROM orders WHERE customer_id IN (SELECT id FROM customers WHERE city = 'Delhi')","Subquery IN with city filter",Moderate
+"SELECT * FROM payments WHERE amount > (SELECT AVG(amount) FROM payments)","Subquery filter on payments amount",Moderate
+"SELECT customers.name, COUNT(orders.id) FROM customers JOIN orders ON customers.id = orders.customer_id GROUP BY customers.name","Join customers and orders with group by count",Good
+"SELECT products.category, SUM(order_items.quantity) FROM products JOIN order_items ON products.id = order_items.product_id GROUP BY products.category","Join products and order_items with group by category sum quantity",Good
+"SELECT customers.city, AVG(orders.total_amount) FROM customers JOIN orders ON customers.id = orders.customer_id GROUP BY customers.city","Join customers and orders with group by city average total amount",Good
+"SELECT employees.department, COUNT(*) FROM employees GROUP BY employees.department","Group by employees department with count",Good
+"SELECT products.name, SUM(order_items.quantity) FROM products JOIN order_items ON products.id = order_items.product_id GROUP BY products.name ORDER BY SUM(order_items.quantity) DESC","Join and group by products name with sum quantity ordered descending",Good
+"SELECT customers.name, MAX(orders.total_amount) FROM customers JOIN orders ON customers.id = orders.customer_id GROUP BY customers.name","Join customers and orders with group by max total amount",Good
+"SELECT category, COUNT(*) FROM products GROUP BY category","Group by products category with count",Good
+"SELECT city, COUNT() FROM customers GROUP BY city HAVING COUNT() > 5","Group by city with having count greater than 5",Moderate
+"SELECT department, AVG(salary) FROM employees GROUP BY department HAVING AVG(salary) > 60000","Group by department with having average salary greater than 60000",Moderate
+"SELECT products.category, AVG(products.price) FROM products GROUP BY products.category","Group by products category with average price",Good
+"SELECT * FROM customers WHERE name LIKE '%john%'","Inefficient leading wildcard like on customers name",Anti-pattern
+"SELECT * FROM products WHERE price + 100 > 1000","Inefficient arithmetic in where clause on products",Anti-pattern
+"SELECT * FROM orders WHERE YEAR(order_date) = 2024","Inefficient function in where clause on orders",Anti-pattern
+"SELECT * FROM employees WHERE LOWER(name) = 'john'","Inefficient function in where clause on employees",Anti-pattern
+"SELECT * FROM customers WHERE id IN (SELECT customer_id FROM orders)","Inefficient subquery IN on customers",Anti-pattern
+"SELECT * FROM orders ORDER BY total_amount","Inefficient order by total amount on orders",Anti-pattern
+"SELECT DISTINCT city FROM customers","Inefficient distinct on city in customers",Anti-pattern
+"SELECT * FROM products WHERE price * 2 > 1000","Inefficient arithmetic in where clause on products",Anti-pattern
+"SELECT * FROM orders WHERE customer_id NOT IN (SELECT id FROM customers)","Inefficient NOT IN subquery on orders",Anti-pattern
+"SELECT * FROM employees WHERE salary * 1.1 > 60000","Inefficient arithmetic in where clause on employees",Anti-pattern
+"SELECT customers.name, COUNT(orders.id) FROM customers LEFT JOIN orders ON customers.id = orders.customer_id GROUP BY customers.name","Advanced left join customers and orders with group by count",Good
+"SELECT products.name, SUM(order_items.quantity) FROM order_items JOIN products ON order_items.product_id = products.id GROUP BY products.name","Advanced join order_items and products with group by sum quantity",Good
+"SELECT employees.department, AVG(salary) FROM employees GROUP BY employees.department","Advanced group by employees department with average salary",Good
+"SELECT products.category, COUNT(*) FROM products GROUP BY products.category","Advanced group by products category with count",Good
+"SELECT city, COUNT(*) FROM customers GROUP BY city","Advanced group by city with count",Good
+"SELECT * FROM orders WHERE total_amount > 1000 ORDER BY total_amount DESC","Advanced filter and order by total amount descending on orders",Good
+"SELECT * FROM products WHERE stock < 20 ORDER BY stock","Advanced filter and order by stock on products",Good
+"SELECT * FROM employees WHERE department = 'IT' ORDER BY salary DESC","Advanced filter and order by salary descending on employees",Good
+"SELECT * FROM customers WHERE created_at > '2023-01-01'","Advanced filter by created_at on customers",Good
+"SELECT * FROM orders WHERE status = 'Pending'","Advanced filter by status pending on orders",Good
+"SELECT COUNT(*) FROM orders WHERE status = 'Delivered'","Advanced aggregate count on orders with status delivered",Good
+"SELECT SUM(total_amount) FROM orders WHERE status = 'Delivered'","Advanced aggregate sum on orders with status delivered",Good
+"SELECT AVG(total_amount) FROM orders","Advanced aggregate average on orders",Good
+"SELECT MAX(salary) FROM employees","Advanced aggregate max salary on employees",Good
+"SELECT MIN(price) FROM products","Advanced aggregate min price on products",Good

@@ -1,0 +1,903 @@
+"""
+app.py
+AI-Powered SQL Query Optimization & Index Recommendation Engine
+Main Streamlit Dashboard
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+import streamlit as st
+
+from analyzer import analyze_query
+from scoring import compute_score, simulate_optimized_score
+from optimizer import generate_optimizations, generate_ai_insight
+from recommendations import generate_index_recommendations, BEST_PRACTICES
+from execution_plan import (
+    generate_execution_plan, flatten_plan, get_all_nodes, plan_summary, PlanNode
+)
+from simulator import simulate_index_impact, impact_color
+from rewrite_engine import rewrite_query
+from utils.helpers import (
+    format_sql,
+    severity_badge,
+    priority_badge,
+    score_color,
+    cost_color,
+    complexity_color,
+    build_json_report,
+    build_csv_report,
+    build_text_report,
+    history_record,
+)
+
+# ---------------------------------------------------------------------------
+# Page config
+# ---------------------------------------------------------------------------
+st.set_page_config(
+    page_title="MySQL Query Optimizer & Index Recommender",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ---------------------------------------------------------------------------
+# Session state initialisation
+# ---------------------------------------------------------------------------
+if "history" not in st.session_state:
+    st.session_state.history: list[dict] = []
+if "last_result" not in st.session_state:
+    st.session_state.last_result = None
+
+# ---------------------------------------------------------------------------
+# Custom CSS
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+<style>
+    /* Main header gradient */
+    .main-header {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+    .main-header h1 { color: #e94560; margin: 0; font-size: 2.2rem; }
+    .main-header p  { color: #a8b2d8; margin: 0.5rem 0 0; font-size: 1rem; }
+
+    /* Score card */
+    .score-card {
+        background: #1e1e2e;
+        border-radius: 10px;
+        padding: 1.2rem;
+        text-align: center;
+        border: 1px solid #333;
+    }
+    .score-number { font-size: 3rem; font-weight: 800; color: #ffffff; }
+    .score-label  { color: #a8b2d8; font-size: 0.85rem; letter-spacing: 1px; }
+
+    /* Issue / warning cards */
+    .issue-card {
+        background: #2d1b1b;
+        border-left: 4px solid #e74c3c;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        color: #f5b5b5 !important;
+    }
+    .warning-card {
+        background: #2d2a1b;
+        border-left: 4px solid #f39c12;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        color: #f5dfa0 !important;
+    }
+    .success-card {
+        background: #1b2d1b;
+        border-left: 4px solid #2ecc71;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        color: #a8f0b5 !important;
+    }
+
+    /* Section header */
+    .section-header {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #e94560;
+        border-bottom: 2px solid #e94560;
+        padding-bottom: 0.3rem;
+        margin-bottom: 1rem;
+    }
+
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+<div class="main-header">
+    <h1>⚡ AI-Powered SQL Query Optimizer</h1>
+    <p>Index Recommendation Engine &nbsp;|&nbsp; Pattern Detection &nbsp;|&nbsp;
+       Performance Scoring &nbsp;|&nbsp; Query Analysis</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown("##  Tools")
+    st.markdown("---")
+
+    # Sample query picker
+    st.markdown("### 📂 Load Sample Query")
+    try:
+        sample_df = pd.read_csv("data/sample_queries.csv")
+        sample_options = ["— Select a sample —"] + sample_df["query"].tolist()
+        selected_sample = st.selectbox("Choose a sample query", sample_options, label_visibility="collapsed")
+    except Exception:
+        selected_sample = "— Select a sample —"
+
+    st.markdown("---")
+    st.markdown("### 📊 Session Stats")
+    queries_metric_placeholder = st.empty()
+    avg_metric_placeholder = st.empty()
+
+    queries_metric_placeholder.metric("Queries Analyzed", len(st.session_state.history))
+    if st.session_state.history:
+        avg_score = sum(h["score"] for h in st.session_state.history) / len(st.session_state.history)
+        avg_metric_placeholder.metric("Avg Score", f"{avg_score:.1f} / 100")
+    else:
+        avg_metric_placeholder.empty()
+
+    if st.button("🗑️ Clear History"):
+        st.session_state.history = []
+        st.rerun()
+
+# ---------------------------------------------------------------------------
+# Main tabs
+# ---------------------------------------------------------------------------
+tab_analyze, tab_history, tab_dataset, tab_practices, tab_advanced = st.tabs(
+    ["🔍 Query Analyzer", "📜 Query History", "📂 Sample Dataset", "📖 Best Practices", "🔬 Advanced Analysis"]
+)
+
+# ===========================================================================
+# TAB 1 — Query Analyzer
+# ===========================================================================
+with tab_analyze:
+    # Pre-fill from sidebar sample picker
+    default_query = ""
+    if selected_sample != "— Select a sample —":
+        default_query = selected_sample
+
+    col_input, col_tips = st.columns([3, 1])
+
+    with col_input:
+        st.markdown('<div class="section-header">SQL Query Input</div>', unsafe_allow_html=True)
+        query_input = st.text_area(
+            "Paste your SQL query below",
+            value=default_query,
+            height=180,
+            placeholder="SELECT * FROM orders WHERE customer_id = 10",
+            label_visibility="collapsed",
+        )
+
+    with col_tips:
+        st.markdown('<div class="section-header">Quick Tips</div>', unsafe_allow_html=True)
+        st.info(
+            "**Supported patterns**\n\n"
+            "- `SELECT` queries\n"
+            "- `JOIN` queries\n"
+            "- Aggregation (`COUNT`, `SUM` …)\n"
+            "- Subqueries / CTEs\n"
+            "- Filtering / ordering"
+        )
+
+    analyze_btn = st.button("⚡ Analyze Query", type="primary", use_container_width=True)
+
+    if analyze_btn and query_input.strip():
+        query = query_input.strip()
+
+        # ---- Run analysis pipeline ----
+        with st.spinner("Running analysis pipeline…"):
+            analysis      = analyze_query(query)
+            score_result  = compute_score(analysis)
+            opt_score     = simulate_optimized_score(analysis)
+            optimizations = generate_optimizations(query, analysis)
+            index_recs    = generate_index_recommendations(query, analysis)
+            ai_insight    = generate_ai_insight(query, analysis, score_result.total)
+            formatted_sql = format_sql(query)
+
+        # Store for Advanced Analysis tab
+        st.session_state.last_result = {
+            "query":         query,
+            "analysis":      analysis,
+            "score_result":  score_result,
+            "opt_score":     opt_score,
+            "optimizations": optimizations,
+            "index_recs":    index_recs,
+            "ai_insight":    ai_insight,
+        }
+
+        # Save to history
+        rec = history_record(query, analysis, score_result.total)
+        rec["cost"] = score_result.cost_estimate
+        st.session_state.history.append(rec)
+
+        # Refresh sidebar stats in the same run so values don't appear static.
+        queries_metric_placeholder.metric("Queries Analyzed", len(st.session_state.history))
+        avg_score = sum(h["score"] for h in st.session_state.history) / len(st.session_state.history)
+        avg_metric_placeholder.metric("Avg Score", f"{avg_score:.1f} / 100")
+
+        st.markdown("---")
+
+        # ---- Row 1: KPI metrics ----
+        k1, k2, k3, k4, k5 = st.columns(5)
+        with k1:
+            st.markdown(
+                f'<div class="score-card">'
+                f'<div class="score-number" style="color:{score_color(score_result.total)}">'
+                f'{score_result.total}</div>'
+                f'<div class="score-label">PERFORMANCE SCORE</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with k2:
+            color = complexity_color(analysis["complexity"])
+            st.markdown(
+                f'<div class="score-card">'
+                f'<div class="score-number" style="color:{color};font-size:1.8rem">'
+                f'{analysis["complexity"]}</div>'
+                f'<div class="score-label">COMPLEXITY</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with k3:
+            color = cost_color(score_result.cost_estimate)
+            st.markdown(
+                f'<div class="score-card">'
+                f'<div class="score-number" style="color:{color};font-size:1.8rem">'
+                f'{score_result.cost_estimate}</div>'
+                f'<div class="score-label">COST ESTIMATE</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with k4:
+            st.markdown(
+                f'<div class="score-card">'
+                f'<div class="score-number" style="color:#a8b2d8;font-size:1.4rem">'
+                f'{score_result.rows_scanned_estimate}</div>'
+                f'<div class="score-label">ROWS SCANNED</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with k5:
+            improvement = opt_score - score_result.total
+            st.markdown(
+                f'<div class="score-card">'
+                f'<div class="score-number" style="color:#2ecc71">+{improvement}</div>'
+                f'<div class="score-label">POTENTIAL GAIN</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("---")
+
+        # ---- Row 2: Charts ----
+        ch1, ch2, ch3 = st.columns(3)
+
+        with ch1:
+            st.markdown('<div class="section-header">📊 Score Gauge</div>', unsafe_allow_html=True)
+            fig_gauge = go.Figure(
+                go.Indicator(
+                    mode="gauge+number",
+                    value=score_result.total,
+                    domain={"x": [0, 1], "y": [0, 1]},
+                    gauge={
+                        "axis": {"range": [0, 100]},
+                        "bar": {"color": score_color(score_result.total)},
+                        "steps": [
+                            {"range": [0, 49],  "color": "#2d1b1b"},
+                            {"range": [50, 79], "color": "#2d2a1b"},
+                            {"range": [80, 100],"color": "#1b2d1b"},
+                        ],
+                        "threshold": {
+                            "line": {"color": "white", "width": 2},
+                            "thickness": 0.75,
+                            "value": score_result.total,
+                        },
+                    },
+                    number={"font": {"color": score_color(score_result.total), "size": 40}},
+                )
+            )
+            fig_gauge.update_layout(
+                height=250,
+                paper_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        with ch2:
+            st.markdown('<div class="section-header">📈 Optimization Simulation</div>', unsafe_allow_html=True)
+            fig_sim = go.Figure(
+                go.Bar(
+                    x=["Original", "Optimized"],
+                    y=[score_result.total, opt_score],
+                    marker_color=[score_color(score_result.total), "#2ecc71"],
+                    text=[f"{score_result.total}", f"{opt_score}"],
+                    textposition="auto",
+                )
+            )
+            fig_sim.update_layout(
+                height=250,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                yaxis=dict(range=[0, 110], gridcolor="#333"),
+                xaxis=dict(gridcolor="#333"),
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.plotly_chart(fig_sim, use_container_width=True)
+
+        with ch3:
+            st.markdown('<div class="section-header">🔍 Pattern Detection</div>', unsafe_allow_html=True)
+            patterns = {
+                "SELECT *":      1 if analysis["select_star"] else 0,
+                "Missing WHERE": 1 if not analysis["has_where"] else 0,
+                "JOINs":         min(analysis["join_count"], 1),
+                "Subqueries":    min(analysis["subquery_count"], 1),
+                "No LIMIT":      0 if analysis["has_limit"] else 1,
+            }
+            fig_pat = px.bar(
+                x=list(patterns.keys()),
+                y=list(patterns.values()),
+                color=list(patterns.values()),
+                color_continuous_scale=["#2ecc71", "#e74c3c"],
+                labels={"x": "Pattern", "y": "Detected"},
+            )
+            fig_pat.update_layout(
+                height=250,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                yaxis=dict(range=[0, 1.5], gridcolor="#333", tickvals=[0, 1], ticktext=["No", "Yes"]),
+                xaxis=dict(gridcolor="#333"),
+                showlegend=False,
+                coloraxis_showscale=False,
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.plotly_chart(fig_pat, use_container_width=True)
+
+        st.markdown("---")
+
+        # ---- Row 3: Issues + Formatted SQL ----
+        col_issues, col_sql = st.columns([1, 1])
+
+        with col_issues:
+            st.markdown('<div class="section-header">⚠️ Issues Detected</div>', unsafe_allow_html=True)
+            if not analysis["issues"] and not analysis["warnings"]:
+                st.markdown(
+                    '<div class="success-card">✅ No issues detected — this query looks well-structured!</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                for iss in analysis["issues"]:
+                    st.markdown(
+                        f'<div class="issue-card">'
+                        f'<strong>{severity_badge(iss["severity"])}</strong>&nbsp; {iss["message"]}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                for warn in analysis["warnings"]:
+                    st.markdown(
+                        f'<div class="warning-card">'
+                        f'<strong>{severity_badge(warn["severity"])}</strong>&nbsp; {warn["message"]}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Score breakdown expander
+            with st.expander("📋 Score Breakdown"):
+                bd_df = pd.DataFrame(score_result.breakdown)
+                if not bd_df.empty:
+                    bd_df["delta"] = bd_df["delta"].apply(lambda d: f"+{d}" if d > 0 else str(d))
+                    st.dataframe(bd_df[["label", "delta"]], use_container_width=True, hide_index=True)
+                else:
+                    st.write("No scoring rules applied.")
+
+        with col_sql:
+            st.markdown('<div class="section-header">🖊️ Formatted SQL</div>', unsafe_allow_html=True)
+            st.code(formatted_sql, language="sql")
+
+            st.markdown('<div class="section-header" style="margin-top:1rem">🤖 AI Insight</div>', unsafe_allow_html=True)
+            st.info(ai_insight)
+
+        st.markdown("---")
+
+        # ---- Row 4: Optimization Recommendations ----
+        st.markdown('<div class="section-header">🚀 Optimization Recommendations</div>', unsafe_allow_html=True)
+        if not optimizations:
+            st.success("✅ No optimization suggestions — query already follows best practices.")
+        else:
+            for i, opt in enumerate(optimizations, 1):
+                with st.expander(f"{i}. {priority_badge(opt['priority'])}  {opt['title']}"):
+                    st.markdown(f"**Description:** {opt['description']}")
+                    st.code(opt["example"], language="sql")
+
+        st.markdown("---")
+
+        # ---- Row 5: Index Recommendations ----
+        st.markdown('<div class="section-header">🗂️ Index Recommendations</div>', unsafe_allow_html=True)
+        if not index_recs:
+            st.info("No specific index recommendations for this query.")
+        else:
+            for rec in index_recs:
+                with st.expander(f"📌 {rec['index_name']}  ({rec['index_type']})"):
+                    st.code(rec["ddl"], language="sql")
+                    st.markdown(f"**Reason:** {rec['reason']}")
+                    st.success(f"⚡ Estimated Improvement: {rec['estimated_improvement']}")
+
+        st.markdown("---")
+
+        # ---- Row 6: Export Report ----
+        st.markdown('<div class="section-header">📤 Export Analysis Report</div>', unsafe_allow_html=True)
+        ex1, ex2, ex3 = st.columns(3)
+
+        json_report = build_json_report(query, analysis, score_result, optimizations, index_recs, opt_score)
+        csv_report  = build_csv_report(query, analysis, score_result, opt_score)
+        text_report = build_text_report(query, analysis, score_result, optimizations, index_recs, opt_score, ai_insight)
+
+        with ex1:
+            st.download_button(
+                "⬇️ Download JSON Report",
+                data=json_report,
+                file_name="query_report.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        with ex2:
+            st.download_button(
+                "⬇️ Download CSV Report",
+                data=csv_report,
+                file_name="query_report.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with ex3:
+            st.download_button(
+                "⬇️ Download Text Report",
+                data=text_report,
+                file_name="query_report.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
+
+    elif analyze_btn:
+        st.warning("⚠️ Please enter a SQL query before analyzing.")
+
+# ===========================================================================
+# TAB 2 — Query History
+# ===========================================================================
+with tab_history:
+    st.markdown('<div class="section-header">📜 Query History</div>', unsafe_allow_html=True)
+
+    if not st.session_state.history:
+        st.info("No queries analyzed yet in this session. Go to **🔍 Query Analyzer** to get started.")
+    else:
+        hist_df = pd.DataFrame(st.session_state.history)
+        hist_df = hist_df.rename(columns={
+            "timestamp":     "Time",
+            "query_snippet": "Query",
+            "score":         "Score",
+            "complexity":    "Complexity",
+            "cost":          "Cost",
+            "issues":        "Issues",
+        })
+
+        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+
+        # Score trend line chart
+        if len(st.session_state.history) > 1:
+            st.markdown("### Score Trend")
+            scores = [h["score"] for h in st.session_state.history]
+            fig_trend = go.Figure(
+                go.Scatter(
+                    y=scores,
+                    mode="lines+markers+text",
+                    text=[str(s) for s in scores],
+                    textposition="top center",
+                    line=dict(color="#e94560", width=2),
+                    marker=dict(color="#e94560", size=8),
+                )
+            )
+            fig_trend.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                xaxis_title="Query #",
+                yaxis_title="Score",
+                yaxis=dict(range=[0, 105], gridcolor="#333"),
+                xaxis=dict(gridcolor="#333"),
+                height=300,
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+# ===========================================================================
+# TAB 3 — Sample Dataset
+# ===========================================================================
+with tab_dataset:
+    st.markdown('<div class="section-header">📂 Sample Query Dataset</div>', unsafe_allow_html=True)
+    try:
+        df = pd.read_csv("data/sample_queries.csv")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Category distribution chart
+        if "category" in df.columns:
+            cat_counts = df["category"].value_counts().reset_index()
+            cat_counts.columns = ["Category", "Count"]
+            fig_cat = px.pie(
+                cat_counts,
+                names="Category",
+                values="Count",
+                color_discrete_map={
+                    "Good":         "#2ecc71",
+                    "Moderate":     "#f39c12",
+                    "Anti-pattern": "#e74c3c",
+                },
+            )
+            fig_cat.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                height=320,
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.plotly_chart(fig_cat, use_container_width=True)
+
+    except FileNotFoundError:
+        st.error("Sample dataset not found at `data/sample_queries.csv`.")
+
+# ===========================================================================
+# TAB 4 — Best Practices
+# ===========================================================================
+with tab_practices:
+    st.markdown('<div class="section-header">📖 SQL Performance Best Practices</div>', unsafe_allow_html=True)
+    for i, tip in enumerate(BEST_PRACTICES, 1):
+        st.markdown(
+            f'<div class="success-card">✅ <strong>{i}.</strong> {tip}</div>',
+            unsafe_allow_html=True,
+        )
+
+# ===========================================================================
+# TAB 5 — Advanced Analysis
+# ===========================================================================
+with tab_advanced:
+    st.markdown('<div class="section-header">🔬 Advanced Analysis Tools</div>', unsafe_allow_html=True)
+
+    lr = st.session_state.last_result
+    if lr is None:
+        st.info(
+            "**No query analyzed yet.**  "
+            "Paste a SQL query in the **🔍 Query Analyzer** tab and click **⚡ Analyze Query** first."
+        )
+    else:
+        adv_query    = lr["query"]
+        adv_analysis = lr["analysis"]
+        adv_score    = lr["score_result"]
+
+        st.markdown(
+            f"Showing advanced analysis for: `{adv_query[:80]}{'…' if len(adv_query)>80 else ''}`"
+        )
+        st.markdown("---")
+
+        # ===================================================================
+        # SECTION 1 — Execution Plan Visualizer
+        # ===================================================================
+        st.markdown('<div class="section-header">📋 Query Execution Plan Visualizer</div>', unsafe_allow_html=True)
+        st.caption("Simulates the internal execution plan a MySQL 8.x query optimizer would generate for this query (access types: ALL, index, range, ref; Extra: Using where, Using index, Using filesort).")
+
+        plan_root = generate_execution_plan(adv_query, adv_analysis)
+        summary   = plan_summary(plan_root)
+
+        # KPI row for plan
+        pc1, pc2, pc3, pc4 = st.columns(4)
+        with pc1:
+            color = cost_color(summary["cost_category"])
+            st.markdown(
+                f'<div class="score-card"><div class="score-number" style="color:{color};font-size:1.6rem">'
+                f'{summary["cost_category"]}</div><div class="score-label">PLAN COST (EST.)</div></div>',
+                unsafe_allow_html=True,
+            )
+        with pc2:
+            st.markdown(
+                f'<div class="score-card"><div class="score-number" style="color:#a8b2d8;font-size:1.4rem">'
+                f'{summary["estimated_rows"]:,}</div><div class="score-label">EST. OUTPUT ROWS</div></div>',
+                unsafe_allow_html=True,
+            )
+        with pc3:
+            icon = "🟢" if summary["has_index_scan"] else "🔴"
+            label = "ref / range" if summary["has_index_scan"] else "ALL (Table Scan)"
+            st.markdown(
+                f'<div class="score-card"><div class="score-number" style="font-size:1.4rem">'
+                f'{icon} {label}</div><div class="score-label">EST. ACCESS TYPE</div></div>',
+                unsafe_allow_html=True,
+            )
+        with pc4:
+            st.markdown(
+                f'<div class="score-card"><div class="score-number" style="color:#a8b2d8;font-size:1.4rem">'
+                f'{summary["total_nodes"]}</div><div class="score-label">PLAN NODES</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("")
+
+        # ---- Plotly tree visualization ----
+        all_plan_nodes = get_all_nodes(plan_root)
+
+        # Assign positions: leaves get sequential x, parents center over children
+        positions: dict[int, tuple[float, float]] = {}
+        edges_chart: list[tuple[int, int]] = []
+        _leaf_counter = [0]
+
+        def _assign_pos(node: PlanNode, depth: int) -> None:
+            if not node.children:
+                positions[id(node)] = (_leaf_counter[0], -depth)
+                _leaf_counter[0] += 1
+            else:
+                child_xs = []
+                for child in node.children:
+                    _assign_pos(child, depth + 1)
+                    child_xs.append(positions[id(child)][0])
+                    edges_chart.append((id(node), id(child)))
+                positions[id(node)] = (sum(child_xs) / len(child_xs), -depth)
+
+        _assign_pos(plan_root, 0)
+
+        _NODE_COLORS = {
+            "ALL":             "#e74c3c",
+            "ref":             "#2ecc71",
+            "range":           "#27ae60",
+            "eq_ref":          "#2ecc71",
+            "const":           "#1abc9c",
+            "index":           "#f39c12",
+            "Filter":          "#3498db",
+            "filesort":        "#8e44ad",
+            "temporary":       "#d35400",
+            "Hash Join":       "#e67e22",
+            "Nested Loop":     "#d35400",
+            "Aggregate":       "#16a085",
+            "Limit":           "#7f8c8d",
+            "Subquery":        "#c0392b",
+            # Compatibility fallbacks
+            "Seq Scan":        "#e74c3c",
+            "Index Scan":      "#2ecc71",
+            "Sort":            "#8e44ad",
+        }
+
+        # Build edge traces
+        edge_x: list = []
+        edge_y: list = []
+        for pid, cid in edges_chart:
+            px_val, py_val = positions[pid]
+            cx_val, cy_val = positions[cid]
+            # Curved edge via midpoint
+            edge_x += [px_val, (px_val + cx_val) / 2, cx_val, None]
+            edge_y += [py_val, (py_val + cy_val) / 2, cy_val, None]
+
+        node_x     = [positions[id(n)][0] for n in all_plan_nodes]
+        node_y     = [positions[id(n)][1] for n in all_plan_nodes]
+        node_label = [n.node_type for n in all_plan_nodes]
+        node_hover = [
+            f"<b>{n.node_type}</b><br>"
+            f"{n.description}<br>"
+            f"Est. Rows: {n.estimated_rows:,}<br>"
+            f"Cost: {n.cost_label}"
+            for n in all_plan_nodes
+        ]
+        node_colors = [_NODE_COLORS.get(n.node_type, "#7f8c8d") for n in all_plan_nodes]
+
+        fig_plan = go.Figure()
+        if edge_x:
+            fig_plan.add_trace(go.Scatter(
+                x=edge_x, y=edge_y,
+                mode="lines",
+                line=dict(color="#555", width=2),
+                hoverinfo="none",
+                showlegend=False,
+            ))
+        fig_plan.add_trace(go.Scatter(
+            x=node_x, y=node_y,
+            mode="markers+text",
+            marker=dict(
+                size=55,
+                color=node_colors,
+                line=dict(color="white", width=2),
+                symbol="circle",
+            ),
+            text=node_label,
+            textposition="middle center",
+            textfont=dict(color="white", size=9.5),
+            hovertext=node_hover,
+            hoverinfo="text",
+            showlegend=False,
+        ))
+        fig_plan.update_layout(
+            height=max(350, len(set(positions[id(n)][1] for n in all_plan_nodes)) * 100),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="white",
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            margin=dict(t=30, b=30, l=30, r=30),
+        )
+        st.plotly_chart(fig_plan, use_container_width=True)
+
+        # ---- Plan node table ----
+        with st.expander("📄 Execution Plan Detail Table"):
+            plan_df = pd.DataFrame(flatten_plan(plan_root))
+            st.dataframe(plan_df, use_container_width=True, hide_index=True)
+
+        # Legend
+        st.caption(
+            "🔴 ALL (Full Table Scan - expensive)  "
+            "🟢 ref / range (Index Lookup - efficient)  "
+            "🟡 index (Covering Index Scan)  "
+            "🟠 Hash Join (MySQL 8.0.18+)  "
+            "🔶 Nested Loop  "
+            "🔷 filesort (Using filesort)  "
+            "🟤 temporary (Using temporary)  "
+            "⬛ Limit"
+        )
+
+        st.markdown("---")
+
+        # ===================================================================
+        # SECTION 2 — Index Impact Simulator
+        # ===================================================================
+        st.markdown('<div class="section-header">⚡ Index Impact Simulator</div>', unsafe_allow_html=True)
+        st.caption("Projects query performance before and after applying the recommended indexes.")
+
+        impact = simulate_index_impact(adv_query, adv_analysis, adv_score)
+
+        imp_col = impact_color(impact["impact_level"])
+
+        # Before / After metric cards
+        ia1, ia2, ia3 = st.columns(3)
+        with ia1:
+            st.markdown("#### Before Indexes")
+            st.markdown(
+                f'<div class="score-card" style="border-color:#e74c3c">'
+                f'<div class="score-number" style="color:{score_color(impact["before_score"])}">{impact["before_score"]}</div>'
+                f'<div class="score-label">SCORE</div></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Cost:** `{impact['before_cost']}`")
+            st.markdown(f"**Rows Scanned:** `{impact['before_rows']:,}`")
+            st.markdown(f"**Est. Time:** `{impact['before_time_ms']:,} ms`")
+
+        with ia2:
+            st.markdown("#### After Indexes")
+            st.markdown(
+                f'<div class="score-card" style="border-color:#2ecc71">'
+                f'<div class="score-number" style="color:{score_color(impact["after_score"])}">{impact["after_score"]}</div>'
+                f'<div class="score-label">SCORE</div></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Cost:** `{impact['after_cost']}`")
+            st.markdown(f"**Rows Scanned:** `{impact['after_rows']:,}`")
+            st.markdown(f"**Est. Time:** `{impact['after_time_ms']:,} ms`")
+
+        with ia3:
+            st.markdown("#### Performance Gain")
+            st.markdown(
+                f'<div class="score-card" style="border-color:{imp_col}">'
+                f'<div class="score-number" style="color:{imp_col}">+{impact["score_improvement"]}</div>'
+                f'<div class="score-label">SCORE GAIN</div></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Impact Level:** `{impact['impact_level']}`")
+            st.markdown(f"**Speedup:** `{impact['speedup_label']}`")
+            st.markdown(f"**Rows Reduced:** `{impact['rows_reduction_pct']}%`")
+
+        st.markdown("")
+
+        # Before vs After bar chart
+        fig_impact = go.Figure()
+        metrics      = ["Score", "Est. Time (ms)"]
+        before_vals  = [impact["before_score"], min(impact["before_time_ms"], 2000)]
+        after_vals   = [impact["after_score"],  min(impact["after_time_ms"],  2000)]
+
+        fig_impact.add_trace(go.Bar(
+            name="Before Indexes",
+            x=metrics,
+            y=before_vals,
+            marker_color="#e74c3c",
+            text=[str(v) for v in before_vals],
+            textposition="auto",
+        ))
+        fig_impact.add_trace(go.Bar(
+            name="After Indexes",
+            x=metrics,
+            y=after_vals,
+            marker_color="#2ecc71",
+            text=[str(v) for v in after_vals],
+            textposition="auto",
+        ))
+        fig_impact.update_layout(
+            barmode="group",
+            height=300,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="white",
+            yaxis=dict(gridcolor="#333"),
+            xaxis=dict(gridcolor="#333"),
+            legend=dict(bgcolor="rgba(0,0,0,0)"),
+            margin=dict(t=20, b=20, l=20, r=20),
+        )
+        st.plotly_chart(fig_impact, use_container_width=True)
+
+        if impact["indexed_columns"]:
+            st.info(
+                f"📌 Columns to index: **{', '.join(impact['indexed_columns'])}**  →  "
+                f"estimated **{impact['speedup_label']}** after indexing."
+            )
+
+        st.markdown("---")
+
+        # ===================================================================
+        # SECTION 3 — Query Rewrite Engine
+        # ===================================================================
+        st.markdown('<div class="section-header">✏️ Query Rewrite Engine</div>', unsafe_allow_html=True)
+        st.caption("Automatically rewrites inefficient SQL patterns into optimized equivalents.")
+
+        rewrite = rewrite_query(adv_query, adv_analysis)
+
+        rw1, rw2 = st.columns(2)
+        with rw1:
+            st.markdown("**Original Query**")
+            st.code(rewrite["original"], language="sql")
+        with rw2:
+            st.markdown("**Rewritten Query**")
+            st.code(rewrite["rewritten"], language="sql")
+
+        st.markdown("")
+
+        if rewrite["is_changed"]:
+            st.markdown("**Transformations Applied:**")
+            for change in rewrite["changes"]:
+                st.markdown(
+                    f'<div class="success-card">✅ {change}</div>',
+                    unsafe_allow_html=True,
+                )
+            if rewrite["rewrite_score_est"] > 0:
+                st.success(
+                    f"⚡ Applying these rewrites could add approximately "
+                    f"**+{rewrite['rewrite_score_est']} points** to the performance score."
+                )
+        else:
+            st.success("✅ No automatic rewrites needed — query is already well-structured.")
+
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+st.markdown("---")
+st.markdown(
+    "<div style='text-align:center;color:#555;font-size:0.8rem'>"
+    "AI-Powered SQL Query Optimization & Index Recommendation Engine &nbsp;|&nbsp; "
+    "Built with Streamlit + Plotly + sqlparse &nbsp;|&nbsp; 18 Features"
+    "</div>",
+    unsafe_allow_html=True,
+)
