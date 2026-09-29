@@ -308,6 +308,21 @@ docker compose down -v
 
 ---
 
+## ☁️ Deploy to Streamlit Community Cloud
+
+The application is engineered to run zero-configuration demo mode on Streamlit Community Cloud:
+
+### Deployment Checklist
+1. **GitHub Repository**: Push code to your public or private GitHub repository.
+2. **Main File Path**: Set to `app.py`.
+3. **Python Version**: Select `3.11`.
+4. **App Secrets (Optional)**:
+   - In App Settings > Secrets, paste optional environment keys from `.streamlit/secrets.toml.example` (e.g. `GEMINI_API_KEY`).
+   - If left empty, the application runs seamlessly in **Demo Mode** using local heuristics and sample schema without errors or API keys.
+5. **Custom Subdomain**: Configure your vanity URL (e.g., `https://sql-optimizer.streamlit.app`).
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -37,6 +36,7 @@ class SidebarState:
     selected_sample: str
     enable_ai: bool
     active_schema: SchemaInfo | None
+    is_connected: bool = False
 
 
 def render_sidebar() -> SidebarState:
@@ -171,4 +171,5 @@ def render_sidebar() -> SidebarState:
         selected_sample=selected_sample,
         enable_ai=enable_ai,
         active_schema=st.session_state.get(KEY_SCHEMA_INFO),
+        is_connected=st.session_state.get(KEY_DB_ENGINE) is not None,
     )

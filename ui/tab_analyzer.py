@@ -35,7 +35,6 @@ from utils.helpers import (
     format_sql,
     history_record,
     priority_badge,
-    score_color,
     severity_badge,
 )
 
@@ -45,6 +44,9 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
     default_query = ""
     if sidebar_state.selected_sample != "— Select a sample —":
         default_query = sidebar_state.selected_sample
+
+    if not sidebar_state.is_connected:
+        st.info("ℹ️ **Demo Mode**: Offline estimates only (not connected to a live database). Schema and index advice use sample `shop_db`.")
 
     col_input, col_tips = st.columns([3, 1])
 
