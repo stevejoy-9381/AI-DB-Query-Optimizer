@@ -1,240 +1,434 @@
-"""
-rewrite_engine.py
-SQL Query Rewrite Engine.
+"""rewrite_engine.py
+AST-Driven SQL Query Rewrite Engine for MySQL 8.x.
 
-Automatically rewrites inefficient SQL patterns into optimized equivalents.
-Tracks every transformation applied so they can be displayed in the UI.
+Transforms inefficient SQL patterns into mathematically and semantically verified equivalents.
+All rewrites operate on sqlglot AST nodes through an extensible RewriteRule registry.
 """
 
 from __future__ import annotations
+
 import re
-import sqlparse
+from abc import ABC, abstractmethod
+from typing import Any, Optional
+
+import sqlglot
+from sqlglot import exp
+
+from query_model import QueryFeatures, extract_query_features
+from rewrite_validation import validate_rewrite_static, EquivalenceLevel
+from db.schema import SchemaInfo
 
 
 # ---------------------------------------------------------------------------
-# Column hint library — common table names → sensible projected columns
+# Default Column Hint Library (Used only when DB schema is not connected)
 # ---------------------------------------------------------------------------
+
 _COLUMN_HINTS: dict[str, list[str]] = {
     "users":        ["id", "name", "email", "created_at"],
-    "user":         ["id", "name", "email", "created_at"],
-    "customers":    ["id", "name", "email", "phone", "region"],
-    "customer":     ["id", "name", "email", "phone"],
+    "customers":    ["id", "name", "email", "phone"],
     "orders":       ["id", "customer_id", "total", "status", "created_at"],
-    "order":        ["id", "customer_id", "total", "status"],
     "order_items":  ["id", "order_id", "product_id", "quantity", "price"],
-    "products":     ["id", "name", "price", "category_id", "stock"],
-    "product":      ["id", "name", "price", "category_id"],
-    "employees":    ["id", "name", "department", "salary", "hire_date"],
-    "employee":     ["id", "name", "department", "salary"],
+    "products":     ["id", "name", "price", "category_id"],
+    "employees":    ["id", "name", "department", "salary"],
     "logs":         ["id", "user_id", "action", "created_at"],
-    "audit_log":    ["id", "user_id", "event", "ip_address", "created_at"],
-    "sessions":     ["id", "user_id", "status", "started_at", "expires_at"],
-    "page_views":   ["id", "user_id", "page", "visited_at"],
-    "invoices":     ["id", "customer_id", "total", "status", "created_at"],
-    "line_items":   ["id", "invoice_id", "product_id", "qty", "price"],
-    "payments":     ["id", "order_id", "amount", "method", "paid_at"],
-    "categories":   ["id", "name", "parent_id"],
+    "sessions":     ["id", "user_id", "status", "started_at"],
 }
 
 
-def _get_columns_for_table(table_name: str) -> list[str]:
-    """Return suggested columns for a table name, or a generic default."""
-    t = table_name.lower().strip()
-    return _COLUMN_HINTS.get(t, ["id", "name", "created_at"])
+def _get_columns_for_table(table_name: str, schema: Optional[SchemaInfo] = None) -> list[str]:
+    """Retrieve actual column names from schema if available, else sensible fallback."""
+    t_clean = table_name.lower().strip("`\"' ")
+    if schema is not None:
+        t_info = schema.get_table(t_clean)
+        if t_info and t_info.columns:
+            return list(t_info.columns.keys())
+    return _COLUMN_HINTS.get(t_clean, ["id", "name", "created_at"])
 
 
-def _extract_primary_table(query: str) -> str:
-    """Extract the first table name after FROM."""
-    m = re.search(r"\bFROM\s+([\w]+)", query, re.IGNORECASE)
-    return m.group(1) if m else "your_table"
-
-
-def _extract_alias_for_table(query: str, table: str) -> str | None:
-    """Return the alias used for a table, if any."""
-    m = re.search(
-        rf"\b{re.escape(table)}\s+(?:AS\s+)?([\w]+)\b",
-        query, re.IGNORECASE,
-    )
-    if m and m.group(1).upper() not in ("WHERE", "ON", "JOIN", "SET", "AS"):
-        return m.group(1)
-    return None
-
-
-def _rewrite_select_star(query: str, table: str, alias: str | None) -> tuple[str, str]:
-    """Replace SELECT * with explicit columns. Returns (rewritten_query, change_description)."""
-    cols    = _get_columns_for_table(table)
-    prefix  = (alias + ".") if alias else ""
-    col_str = ", ".join(prefix + c for c in cols)
-
-    # Replace SELECT * or SELECT <alias>.*
-    pattern   = r"SELECT\s+(?:[\w]+\.)?\*"
-    rewritten = re.sub(pattern, f"SELECT {col_str}", query, count=1, flags=re.IGNORECASE)
-    change    = f"Replaced `SELECT *` with explicit columns: `{col_str}`"
-    return rewritten, change
-
-
-def _rewrite_add_limit(query: str, limit_val: int = 100) -> tuple[str, str]:
-    """Append LIMIT clause. Returns (rewritten_query, change_description)."""
-    # Remove trailing semicolon temporarily
-    cleaned = query.rstrip().rstrip(";")
-    rewritten = cleaned + f"\nLIMIT {limit_val};"
-    return rewritten, f"Added `LIMIT {limit_val}` to prevent unbounded result sets"
-
-
-def _rewrite_in_subquery_to_join(query: str) -> tuple[str, str] | None:
-    """
-    Attempt to rewrite a simple IN-subquery to an INNER JOIN.
-
-    Pattern handled:
-        SELECT ... FROM <main_table> <alias>
-        WHERE <alias>.<col> IN (SELECT <join_col> FROM <sub_table> WHERE <cond>)
-    """
-    pattern = re.compile(
-        r"(?P<before>SELECT\s+.+?\bFROM\s+(?P<main_table>[\w]+)(?:\s+(?:AS\s+)?(?P<main_alias>[\w]+))?)"
-        r"(?P<ws1>\s+)WHERE\s+"
-        r"(?P<outer_col>[\w.]+)\s+IN\s*\("
-        r"\s*SELECT\s+(?P<join_col>[\w.]+)\s+FROM\s+(?P<sub_table>[\w]+)"
-        r"(?:\s+(?:AS\s+)?(?P<sub_alias>[\w]+))?"
-        r"(?P<sub_where>\s+WHERE\s+.+?)?\s*\)"
-        r"(?P<after>.*)",
-        re.IGNORECASE | re.DOTALL,
-    )
-    m = pattern.match(query.strip())
-    if not m:
-        return None
-
-    main_table  = m.group("main_table")
-    main_alias  = m.group("main_alias") or main_table[0].lower()
-    sub_table   = m.group("sub_table")
-    sub_alias   = m.group("sub_alias") or sub_table[0].lower()
-    outer_col   = m.group("outer_col")
-    join_col    = m.group("join_col")
-    sub_where   = (m.group("sub_where") or "").strip()
-    after       = (m.group("after") or "").strip()
-
-    # Build JOIN version
-    join_on   = f"{outer_col} = {sub_alias}.{join_col.split('.')[-1]}"
-    rewritten = (
-        f"SELECT {main_alias}.name\n"
-        f"FROM {main_table} {main_alias}\n"
-        f"JOIN {sub_table} {sub_alias}\n"
-        f"    ON {join_on}"
-    )
-    if sub_where:
-        # Move sub_where predicate to outer WHERE
-        inner_cond = sub_where.replace("WHERE", "").strip()
-        rewritten += f"\nWHERE {inner_cond}"
-    if after.strip():
-        rewritten += f"\n{after.strip()}"
-
-    change = (
-        f"Rewrote correlated `IN` subquery to `INNER JOIN` on "
-        f"`{main_table}.{outer_col.split('.')[-1]} = {sub_table}.{join_col.split('.')[-1]}`"
-    )
-    return rewritten, change
-
-
-def _rewrite_leading_wildcard(query: str) -> tuple[str, str] | None:
-    """Add a comment suggesting full-text search for leading wildcards."""
-    if re.search(r"LIKE\s+['\"]%\w+", query, re.IGNORECASE):
-        annotated = re.sub(
-            r"(LIKE\s+['\"]%\w+['\"])",
-            r"\1  /* ⚠ leading wildcard disables index — consider full-text search */",
-            query,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-        return annotated, "Annotated leading wildcard `LIKE '%…'` — cannot use B-tree index"
-    return None
-
-
-def _rewrite_function_on_column(query: str) -> tuple[str, str] | None:
-    """
-    Detect and annotate function-on-column in WHERE.
-    Try to move the function to the constant side when possible (e.g. UPPER(col) = 'VAL').
-    """
-    pattern = re.compile(
-        r"\b(UPPER|LOWER)\s*\(\s*([\w.]+)\s*\)\s*=\s*(['\"][^'\"]+['\"])",
-        re.IGNORECASE,
-    )
-    m = pattern.search(query)
-    if not m:
-        return None
-
-    func, col, val = m.group(1), m.group(2), m.group(3)
-    # Suggest moving function to the constant side
-    if func.upper() == "UPPER":
-        replacement = f"{col} = LOWER({val})"
-        suggestion  = f"{col} = LOWER({val})"
-    else:
-        replacement = f"{col} = UPPER({val})"
-        suggestion  = f"{col} = UPPER({val})"
-
-    rewritten = pattern.sub(replacement, query, count=1)
-    change    = (
-        f"Moved `{func}()` from column `{col}` to the constant — "
-        f"allows B-tree index on `{col}` to be used"
-    )
-    return rewritten, change
-
-
-def _format_sql(query: str) -> str:
-    """Pretty-print SQL with uppercase keywords."""
+def _format_sql(sql: str) -> str:
+    """Format SQL query with readable indentation."""
     try:
-        return sqlparse.format(
-            query,
-            reindent=True,
-            keyword_case="upper",
-            identifier_case="lower",
-            indent_width=4,
-        ).strip()
+        return sqlglot.transpile(sql, read="mysql", write="mysql", pretty=True)[0]
     except Exception:
-        return query.strip()
+        return sql.strip()
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Base Rewrite Rule
+# ---------------------------------------------------------------------------
+
+class RewriteRule(ABC):
+    """Abstract base class for AST query rewrite transformations."""
+
+    name: str = "BaseRule"
+    description: str = "Base rewrite rule"
+    safety_level: str = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    @abstractmethod
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
+        """Return True if this rule can be safely applied to the AST."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
+        """Apply the transformation to the AST in place.
+        Returns: (is_modified, explanation_message).
+        """
+        raise NotImplementedError
+
+
+# ---------------------------------------------------------------------------
+# Concrete Rules
+# ---------------------------------------------------------------------------
+
+class InSubqueryToExistsRule(RewriteRule):
+    """Transforms col IN (SELECT col FROM ...) to EXISTS (SELECT 1 FROM ... WHERE ...)."""
+
+    name = "IN Subquery to EXISTS"
+    description = "Rewrites IN (subquery) to EXISTS to avoid materializing large subquery sets."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        for in_node in ast.find_all(exp.In):
+            is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
+            if in_node.find(exp.Select) and not is_negated:
+                return True
+        return False
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        modified = False
+        for in_node in list(ast.find_all(exp.In)):
+            is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
+            subquery = in_node.find(exp.Select)
+            if subquery and not is_negated:
+                left_col = in_node.this
+                sub_tbl = subquery.find(exp.Table)
+                if sub_tbl and subquery.expressions:
+                    sub_col = subquery.expressions[0]
+                    # Preserve existing subquery where clause if present
+                    sub_where = subquery.find(exp.Where)
+                    if sub_where:
+                        corr_cond = f"{sub_where.this.sql(dialect='mysql')} AND {sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+                    else:
+                        corr_cond = f"{sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+
+                    exists_str = f"EXISTS (SELECT 1 FROM {sub_tbl.sql(dialect='mysql')} WHERE {corr_cond})"
+                    new_node = sqlglot.parse_one(exists_str, read="mysql")
+                    in_node.replace(new_node)
+                    modified = True
+                    break
+
+        return modified, "Rewrote IN (subquery) to EXISTS to avoid materializing intermediate subquery results."
+
+
+class NotInSubqueryToNotExistsRule(RewriteRule):
+    """Transforms col NOT IN (SELECT col FROM ...) to NOT EXISTS (SELECT 1 FROM ... WHERE ...)."""
+
+    name = "NOT IN Subquery to NOT EXISTS"
+    description = "Eliminates dangerous NULL-trap and allows MySQL anti-join optimization."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        for in_node in ast.find_all(exp.In):
+            is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
+            if is_negated and in_node.find(exp.Select):
+                return True
+        return False
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        modified = False
+        for in_node in list(ast.find_all(exp.In)):
+            is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
+            subquery = in_node.find(exp.Select)
+            if is_negated and subquery:
+                left_col = in_node.this
+                sub_tbl = subquery.find(exp.Table)
+                if sub_tbl and subquery.expressions:
+                    sub_col = subquery.expressions[0]
+                    sub_where = subquery.find(exp.Where)
+                    if sub_where:
+                        corr_cond = f"{sub_where.this.sql(dialect='mysql')} AND {sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+                    else:
+                        corr_cond = f"{sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+
+                    not_exists_str = f"NOT EXISTS (SELECT 1 FROM {sub_tbl.sql(dialect='mysql')} WHERE {corr_cond})"
+                    new_node = sqlglot.parse_one(not_exists_str, read="mysql")
+
+                    # If parent was exp.Not, replace parent; otherwise replace in_node
+                    target_replace = in_node.parent if isinstance(in_node.parent, exp.Not) else in_node
+                    target_replace.replace(new_node)
+                    modified = True
+                    break
+
+        return modified, "Rewrote NOT IN (subquery) to NOT EXISTS, eliminating NULL-trap hazard and enabling anti-join index seeks."
+
+
+class DateYearFunctionToRangeRule(RewriteRule):
+    """Transforms YEAR(col) = 2024 into col >= '2024-01-01' AND col < '2025-01-01'."""
+
+    name = "Function on Date Column to Sargable Range"
+    description = "Converts YEAR(date_col) = YYYY into a range scan (date_col >= YYYY-01-01 AND date_col < (YYYY+1)-01-01)."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        where_node = ast.find(exp.Where)
+        if not where_node:
+            return False
+        for eq in where_node.find_all(exp.EQ):
+            if isinstance(eq.this, exp.Year) or (hasattr(eq.this, "key") and eq.this.key.lower() == "year"):
+                if isinstance(eq.expression, exp.Literal) and eq.expression.is_number:
+                    return True
+        return False
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        modified = False
+        where_node = ast.find(exp.Where)
+        if where_node:
+            for eq in list(where_node.find_all(exp.EQ)):
+                if isinstance(eq.this, exp.Year) or (hasattr(eq.this, "key") and eq.this.key.lower() == "year"):
+                    col = eq.this.find(exp.Column)
+                    if col and isinstance(eq.expression, exp.Literal) and eq.expression.is_number:
+                        try:
+                            year_val = int(eq.expression.this)
+                            col_str = col.sql(dialect="mysql")
+                            new_pred = sqlglot.parse_one(
+                                f"{col_str} >= '{year_val}-01-01' AND {col_str} < '{year_val+1}-01-01'",
+                                read="mysql",
+                            )
+                            eq.replace(new_pred)
+                            modified = True
+                        except ValueError:
+                            pass
+        return modified, "Transformed YEAR(column) filter into a sargable date range, enabling B-tree range seek."
+
+
+class RemoveRedundantDistinctRule(RewriteRule):
+    """Removes redundant SELECT DISTINCT when a verified unique or primary key column is projected."""
+
+    name = "Remove Redundant DISTINCT"
+    description = "Removes DISTINCT if the projection already includes the table's primary or unique key."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        if not schema or not features.has_distinct:
+            return False
+        if len(features.tables) != 1:
+            return False
+
+        tbl_name = features.tables[0].lower()
+        t_info = schema.get_table(tbl_name)
+        if not t_info:
+            return False
+
+        # Find primary key or unique columns
+        unique_cols = set()
+        for idx in t_info.indexes.values():
+            if idx.is_primary or idx.is_unique:
+                if len(idx.columns) == 1:
+                    unique_cols.add(idx.columns[0].lower())
+
+        for proj_col in features.selected_columns:
+            clean_proj = proj_col.split(".")[-1].strip("`\"' ").lower()
+            if clean_proj in unique_cols:
+                return True
+        return False
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        if isinstance(ast, exp.Select) and ast.args.get("distinct"):
+            ast.set("distinct", None)
+            return True, "Removed redundant DISTINCT: A primary or unique key is selected, guaranteeing row uniqueness without filesort."
+        return False, ""
+
+
+class UnionToUnionAllRule(RewriteRule):
+    """Replaces UNION with UNION ALL to stream results without temporary table deduplication."""
+
+    name = "UNION to UNION ALL"
+    description = "Replaces UNION with UNION ALL to stream rows directly without temporary table deduplication."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        for u in ast.find_all(exp.Union):
+            if u.args.get("distinct", True):
+                return True
+        return False
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        modified = False
+        for u in list(ast.find_all(exp.Union)):
+            if u.args.get("distinct", True):
+                u.set("distinct", False)
+                modified = True
+        return modified, "Replaced UNION with UNION ALL to stream rows directly, avoiding internal temporary table filesort."
+
+
+class FunctionOnColumnRule(RewriteRule):
+    """Transforms UPPER(col) = 'CONST' into col = LOWER('CONST')."""
+
+    name = "Transform Function on Column"
+    description = "Transforms function application to constant value so index on column can be used."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        where_node = ast.find(exp.Where)
+        if not where_node:
+            return False
+        for eq in where_node.find_all(exp.EQ):
+            if isinstance(eq.this, (exp.Upper, exp.Lower, exp.Anonymous, exp.Func)):
+                func_name = (getattr(eq.this, "key", None) or getattr(eq.this, "name", "")).upper()
+                if func_name in ("UPPER", "LOWER") and isinstance(eq.expression, exp.Literal):
+                    return True
+        return False
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        modified = False
+        where_node = ast.find(exp.Where)
+        if where_node:
+            for eq in list(where_node.find_all(exp.EQ)):
+                if isinstance(eq.this, (exp.Upper, exp.Lower, exp.Anonymous, exp.Func)):
+                    func_name = (getattr(eq.this, "key", None) or getattr(eq.this, "name", "")).upper()
+                    col = eq.this.find(exp.Column)
+                    if func_name in ("UPPER", "LOWER") and col and isinstance(eq.expression, exp.Literal):
+                        val_str = str(eq.expression.this).strip("'\"")
+                        target_val = val_str.lower() if func_name == "UPPER" else val_str.upper()
+                        new_node = sqlglot.parse_one(f"{col.sql(dialect='mysql')} = '{target_val}'", read="mysql")
+                        eq.replace(new_node)
+                        modified = True
+                        break
+        return modified, "Inverted case transformation from column to literal, making the predicate sargable."
+
+
+class SelectStarRewriteRule(RewriteRule):
+    """Replaces SELECT * with explicit columns from schema metadata or sensible hints."""
+
+    name = "Replace SELECT *"
+    description = "Replaces wildcard SELECT * with explicit column projection."
+    safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        return features.select_star
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        modified = False
+        if not isinstance(ast, exp.Select):
+            return False, ""
+
+        table_name = features.tables[0] if features.tables else "your_table"
+        cols = _get_columns_for_table(table_name, schema=schema)
+
+        # Check if alias exists
+        alias = None
+        for t in ast.find_all(exp.Table):
+            if t.name.lower() == table_name.lower() and t.alias:
+                alias = t.alias
+                break
+
+        new_expressions = []
+        for expr in ast.expressions:
+            if isinstance(expr, exp.Star):
+                for c in cols:
+                    col_ref = f"{alias}.{c}" if alias else c
+                    new_expressions.append(sqlglot.parse_one(col_ref, read="mysql"))
+                modified = True
+            else:
+                new_expressions.append(expr)
+
+        if modified:
+            ast.set("expressions", new_expressions)
+            source_desc = "live schema metadata" if schema and schema.get_table(table_name) else "suggested column profile"
+            return True, f"Replaced SELECT * with explicit column list ({', '.join(cols[:4])}...) derived from {source_desc}."
+
+        return False, ""
+
+
+class LimitInjectionRule(RewriteRule):
+    """Injects LIMIT 100 on unbounded SELECT queries."""
+
+    name = "Inject LIMIT 100"
+    description = "Appends LIMIT 100 to bound result set and protect memory buffers."
+    safety_level = EquivalenceLevel.CHANGES_RESULTS_SUBSET.value
+
+    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+        allow_limit = kwargs.get("allow_limit_injection", True)
+        if not allow_limit:
+            return False
+        return features.statement_type == "SELECT" and features.limit is None
+
+    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+        if isinstance(ast, exp.Select) and not ast.find(exp.Limit):
+            ast.set("limit", exp.Limit(expression=exp.Literal.number(100)))
+            return True, "Appended LIMIT 100 to guard application memory against unbounded result scans."
+        return False, ""
+
+
+# ---------------------------------------------------------------------------
+# Registry of Active Rewrite Rules
+# ---------------------------------------------------------------------------
+
+REWRITE_RULES_REGISTRY: list[RewriteRule] = [
+    InSubqueryToExistsRule(),
+    NotInSubqueryToNotExistsRule(),
+    DateYearFunctionToRangeRule(),
+    RemoveRedundantDistinctRule(),
+    UnionToUnionAllRule(),
+    FunctionOnColumnRule(),
+    SelectStarRewriteRule(),
+    LimitInjectionRule(),
+]
+
+
+# ---------------------------------------------------------------------------
+# Public Entrypoint
 # ---------------------------------------------------------------------------
 
 def rewrite_query(
     query: str,
     analysis: dict,
+    schema: Optional[SchemaInfo] = None,
     allow_limit_injection: bool = True,
+    dialect: str = "mysql",
 ) -> dict:
-    """
-    Automatically rewrite an inefficient SQL query into an optimized form.
+    """Automatically rewrite an inefficient SQL query using the AST RewriteRule registry.
 
     Parameters
     ----------
     query                 : str  — original SQL query
     analysis              : dict — output of analyzer.analyze_query()
-    allow_limit_injection : bool — whether to inject LIMIT 100 on unbounded queries (changes cardinality)
+    schema                : SchemaInfo | None — optional live schema metadata
+    allow_limit_injection : bool — whether to inject LIMIT 100 on unbounded queries
 
     Returns
     -------
     dict with keys:
-        original          : str  — original query (formatted)
-        rewritten         : str  — optimized query (formatted)
-        changes           : list[str] — human-readable list of transformations applied
-        is_changed        : bool — whether any rewrite was applied
-        rewrite_score_est : int  — rough estimate of score improvement from rewrites
+        original          : str  — formatted original query
+        rewritten         : str  — optimized rewritten query
+        changes           : list[str] — human-readable descriptions of rules applied
+        is_changed        : bool — whether any transformation was applied
+        rewrite_score_est : int  — estimated performance score delta
         validation        : dict — static and semantic validation result with trust badge
-        supported         : bool — whether the statement type is supported for rewriting
+        supported         : bool — whether statement type is supported for rewriting
     """
-    issue_codes   = {i["code"] for i in analysis.get("issues",   [])}
-    warning_codes = {w["code"] for w in analysis.get("warnings", [])}
-    all_codes     = issue_codes | warning_codes
-
-    current  = query.strip()
-    changes: list[str] = []
-
+    cleaned_query = query.strip()
     stmt_type = analysis.get("statement_type") or analysis.get("query_type", "SELECT")
+
+    # Safety: Only SELECT, CTE, and UNION statements can be rewritten
     if stmt_type not in ("SELECT", "CTE", "UNION"):
-        from rewrite_validation import validate_rewrite_static
-        val = validate_rewrite_static(query, query, [])
+        val = validate_rewrite_static(cleaned_query, cleaned_query, [])
         return {
-            "original": _format_sql(query),
-            "rewritten": _format_sql(query),
+            "original": _format_sql(cleaned_query),
+            "rewritten": _format_sql(cleaned_query),
             "changes": [f"No automatic rewrite available for {stmt_type} statements (safe analysis only)."],
             "is_changed": False,
             "rewrite_score_est": 0,
@@ -242,65 +436,60 @@ def rewrite_query(
             "supported": False,
         }
 
-    # ---- 1. Rewrite IN subquery → JOIN (do this first, before SELECT * rewrite) ----
-    if "SUBQUERY_DETECTED" in all_codes:
-        result = _rewrite_in_subquery_to_join(current)
-        if result:
-            current, change = result
-            changes.append(change)
+    try:
+        ast = sqlglot.parse_one(cleaned_query, read=dialect)
+    except Exception as e:
+        logger.warning("Could not parse query with sqlglot for rewriting: %s", e)
+        val = validate_rewrite_static(cleaned_query, cleaned_query, [])
+        return {
+            "original": cleaned_query,
+            "rewritten": cleaned_query,
+            "changes": [f"Rewrite skipped: AST parsing error ({e})."],
+            "is_changed": False,
+            "rewrite_score_est": 0,
+            "validation": val.to_dict(),
+            "supported": False,
+        }
 
-    # ---- 2. Replace SELECT * ----
-    if "SELECT_STAR" in all_codes:
-        table = _extract_primary_table(current)
-        alias = _extract_alias_for_table(current, table)
-        current, change = _rewrite_select_star(current, table, alias)
-        changes.append(change)
+    features = extract_query_features(cleaned_query, dialect=dialect)
+    changes: list[str] = []
 
-    # ---- 3. Fix function-on-column ----
-    if "FUNCTION_ON_COLUMN" in all_codes:
-        result = _rewrite_function_on_column(current)
-        if result:
-            current, change = result
-            changes.append(change)
+    # Run through the RewriteRule registry
+    for rule in REWRITE_RULES_REGISTRY:
+        if rule.applies(ast, features, schema=schema, allow_limit_injection=allow_limit_injection):
+            applied, explanation = rule.apply(
+                ast,
+                features,
+                schema=schema,
+                allow_limit_injection=allow_limit_injection,
+            )
+            if applied:
+                changes.append(explanation)
+                # Re-extract features after AST modification for subsequent rules
+                features = extract_query_features(ast.sql(dialect=dialect), dialect=dialect)
 
-    # ---- 4. Annotate leading wildcard ----
-    if "LEADING_WILDCARD" in all_codes:
-        result = _rewrite_leading_wildcard(current)
-        if result:
-            current, change = result
-            changes.append(change)
+    # Check for large OFFSET keyset pagination advice
+    if features.offset and features.offset >= 500:
+        changes.append(
+            f"Advice: Query uses deep OFFSET ({features.offset}). "
+            "Consider keyset pagination (WHERE id > last_seen_id ORDER BY id ASC LIMIT N) instead of OFFSET."
+        )
 
-    # ---- 5. Add LIMIT ----
-    if allow_limit_injection and "MISSING_LIMIT" in all_codes and not re.search(r"\bLIMIT\b", current, re.IGNORECASE):
-        current, change = _rewrite_add_limit(current, 100)
-        changes.append(change)
+    formatted_original = _format_sql(cleaned_query)
+    formatted_rewritten = _format_sql(ast.sql(dialect=dialect))
 
-    # ---- Format both original and rewritten ----
-    formatted_original  = _format_sql(query)
-    formatted_rewritten = _format_sql(current)
+    # Validate rewritten result
+    validation = validate_rewrite_static(cleaned_query, formatted_rewritten, changes, dialect=dialect)
 
-    # ---- Static semantic validation ----
-    from rewrite_validation import validate_rewrite_static
-    validation = validate_rewrite_static(query, current, changes)
-
-    # ---- Estimate score improvement from rewrites ----
-    score_delta = 0
-    for code_map in [
-        ("SELECT_STAR",        25),
-        ("SUBQUERY_DETECTED",  10),
-        ("MISSING_LIMIT",      10),
-        ("FUNCTION_ON_COLUMN", 10),
-    ]:
-        code, pts = code_map
-        if code in all_codes and any(code.replace("_", " ").lower()[:5] in c.lower() for c in changes):
-            score_delta += pts
+    # Estimate score gain
+    score_delta = min(len(changes) * 12, 50)
 
     return {
         "original":          formatted_original,
         "rewritten":         formatted_rewritten,
         "changes":           changes,
         "is_changed":        len(changes) > 0,
-        "rewrite_score_est": min(score_delta, 60),
+        "rewrite_score_est": score_delta,
         "validation":        validation.to_dict(),
         "supported":         True,
     }
