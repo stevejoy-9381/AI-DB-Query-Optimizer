@@ -33,6 +33,7 @@ def _get_cached_schema(_engine, db_name: str) -> SchemaInfo:
 @dataclass
 class SidebarState:
     """State values returned from the sidebar for use in tabs."""
+
     selected_sample: str
     enable_ai: bool
     active_schema: SchemaInfo | None
@@ -48,7 +49,9 @@ def render_sidebar() -> SidebarState:
         with st.expander("🔌 Database Connection", expanded=False):
             st.caption("Connect to MySQL 8.x for live EXPLAIN, schema metadata, and benchmarking.")
             db_host = st.text_input("Host", value="localhost", key="sb_db_host")
-            db_port = st.number_input("Port", value=3306, min_value=1, max_value=65535, step=1, key="sb_db_port")
+            db_port = st.number_input(
+                "Port", value=3306, min_value=1, max_value=65535, step=1, key="sb_db_port"
+            )
             db_user = st.text_input("User", value="root", key="sb_db_user")
             db_pass = st.text_input("Password", type="password", key="sb_db_pass")
             db_name = st.text_input("Database", value="shop", key="sb_db_name")
@@ -117,7 +120,8 @@ def render_sidebar() -> SidebarState:
                             st.markdown(f"**`{t_meta.name}`** — `{t_meta.estimated_rows:,}` rows")
                             if t_meta.indexes:
                                 idx_str = ", ".join(
-                                    f"`{idx.name}` ({', '.join(idx.columns)})" for idx in t_meta.indexes.values()
+                                    f"`{idx.name}` ({', '.join(idx.columns)})"
+                                    for idx in t_meta.indexes.values()
                                 )
                                 st.caption(f"Indexes: {idx_str}")
                 except Exception as schema_err:
@@ -125,7 +129,11 @@ def render_sidebar() -> SidebarState:
         else:
             # Offline / Pasted Schema mode
             current_schema: SchemaInfo | None = st.session_state.get(KEY_SCHEMA_INFO)
-            schema_label = f"📋 Schema: `{current_schema.database}`" if current_schema else "📋 Schema (Paste or Load)"
+            schema_label = (
+                f"📋 Schema: `{current_schema.database}`"
+                if current_schema
+                else "📋 Schema (Paste or Load)"
+            )
             with st.expander(schema_label, expanded=False):
                 if current_schema:
                     st.caption(f"🏷️ **Source:** `Schema: {current_schema.source}`")
@@ -136,6 +144,7 @@ def render_sidebar() -> SidebarState:
 
                 # Action 1: Load Sample shop_db
                 from db.schema_parser import load_sample_ddl_schema, parse_ddl_schema
+
                 if st.button("📦 Load Sample Schema (shop_db)", use_container_width=True):
                     try:
                         loaded = load_sample_ddl_schema()
@@ -163,11 +172,15 @@ def render_sidebar() -> SidebarState:
                             st.error(f"Schema syntax error: {e}")
 
                 # Action 3: Upload .sql file
-                uploaded_sql = st.file_uploader("Upload .sql schema", type=["sql"], key="upload_sql_schema")
+                uploaded_sql = st.file_uploader(
+                    "Upload .sql schema", type=["sql"], key="upload_sql_schema"
+                )
                 if uploaded_sql is not None:
                     try:
                         content = uploaded_sql.read().decode("utf-8")
-                        parsed = parse_ddl_schema(content, database_name=uploaded_sql.name.split(".")[0])
+                        parsed = parse_ddl_schema(
+                            content, database_name=uploaded_sql.name.split(".")[0]
+                        )
                         st.session_state[KEY_SCHEMA_INFO] = parsed
                         st.success(f"Loaded schema from {uploaded_sql.name}!")
                         st.rerun()
@@ -194,14 +207,29 @@ def render_sidebar() -> SidebarState:
         st.markdown("### 📂 Load Sample Query")
         selected_sample = "— Select a sample —"
         try:
-            sample_df = pd.read_csv("data/sample_queries.csv")
-            options = ["— Select a sample —"] + sample_df["title"].tolist()
+            import os
+
+            sample_path = (
+                "data/sample_queries_shop.csv"
+                if os.path.exists("data/sample_queries_shop.csv")
+                else "data/sample_queries.csv"
+            )
+            sample_df = pd.read_csv(sample_path)
+            title_col = (
+                "name"
+                if "name" in sample_df.columns
+                else ("title" if "title" in sample_df.columns else "description")
+            )
+            options = ["— Select a sample —"] + sample_df[title_col].tolist()
             choice = st.selectbox("Choose a pre-built query", options, label_visibility="collapsed")
             if choice != "— Select a sample —":
-                row = sample_df[sample_df["title"] == choice].iloc[0]
+                row = sample_df[sample_df[title_col] == choice].iloc[0]
                 selected_sample = row["query"]
-                st.caption(f"**Category:** {row['category']}  |  **Complexity:** {row['complexity']}")
-                st.caption(row["description"])
+                cat = row.get("category", "General")
+                cplx = row.get("complexity", "O(n)")
+                st.caption(f"**Category:** {cat}  |  **Complexity:** {cplx}")
+                if "description" in row and pd.notna(row["description"]):
+                    st.caption(row["description"])
         except Exception as e:
             st.caption(f"Could not load samples: {e}")
 

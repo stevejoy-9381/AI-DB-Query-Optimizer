@@ -45,7 +45,13 @@ sidebar_state = render_sidebar()
 # ---------------------------------------------------------------------------
 try:
     tab_analyze, tab_history, tab_dataset, tab_practices, tab_advanced = st.tabs(
-        ["🔍 Query Analyzer", "📜 Query History", "📂 Sample Dataset", "📖 Best Practices", "🔬 Advanced Analysis"]
+        [
+            "🔍 Query Analyzer",
+            "📜 Query History",
+            "📂 Sample Dataset",
+            "📖 Best Practices",
+            "🔬 Advanced Analysis",
+        ]
     )
 
     with tab_analyze:
@@ -65,14 +71,22 @@ try:
 
 except Exception as unhandled_err:
     from utils.validation import generate_error_reference
+
     err_ref = generate_error_reference()
     import logging
-    logging.getLogger("optimizer").error("Unhandled exception [ref: %s]: %s", err_ref, unhandled_err, exc_info=True)
-    st.error(f"⚠️ Something went wrong (Incident Reference: `{err_ref}`). The error details have been safely logged.")
+
+    logging.getLogger("optimizer").error(
+        "Unhandled exception [ref: %s]: %s", err_ref, unhandled_err, exc_info=True
+    )
+    st.error(
+        f"⚠️ Something went wrong (Incident Reference: `{err_ref}`). The error details have been safely logged."
+    )
     with st.expander("🛠️ Troubleshooting Tips"):
         st.write("1. Check if the database host and credentials in the sidebar are reachable.")
         st.write("2. Make sure your query follows standard MySQL 8.x syntax.")
-        st.write("3. Inspect `logs/app.log` for diagnostic traceback using your incident reference code.")
+        st.write(
+            "3. Inspect `logs/app.log` for diagnostic traceback using your incident reference code."
+        )
 
 # ---------------------------------------------------------------------------
 # Footer

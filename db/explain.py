@@ -8,10 +8,9 @@ import re
 from typing import Any
 
 import sqlparse
-from sqlparse.sql import Statement
-from sqlparse.tokens import DML, Keyword
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlparse.sql import Statement
 
 from execution_plan import PlanNode
 
@@ -19,9 +18,24 @@ logger = logging.getLogger(__name__)
 
 # Disallowed keywords for safe EXPLAIN execution
 _FORBIDDEN_KEYWORDS = {
-    "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE",
-    "CREATE", "GRANT", "REVOKE", "REPLACE", "RENAME", "EXEC",
-    "EXECUTE", "CALL", "LOAD", "INTO", "OUTFILE", "DUMPFILE",
+    "DROP",
+    "DELETE",
+    "UPDATE",
+    "INSERT",
+    "ALTER",
+    "TRUNCATE",
+    "CREATE",
+    "GRANT",
+    "REVOKE",
+    "REPLACE",
+    "RENAME",
+    "EXEC",
+    "EXECUTE",
+    "CALL",
+    "LOAD",
+    "INTO",
+    "OUTFILE",
+    "DUMPFILE",
 }
 
 
@@ -44,17 +58,23 @@ def validate_explainable_query(query: str) -> tuple[bool, str]:
 
     statements = [s for s in sqlparse.parse(cleaned) if s.tokens and str(s).strip()]
     if len(statements) != 1:
-        return False, f"Only a single SQL statement is permitted for EXPLAIN (found {len(statements)})."
+        return (
+            False,
+            f"Only a single SQL statement is permitted for EXPLAIN (found {len(statements)}).",
+        )
 
     stmt: Statement = statements[0]
     stmt_type = stmt.get_type()
 
     if stmt_type != "SELECT":
-        return False, f"Only SELECT queries can be analyzed with EXPLAIN (detected statement type: '{stmt_type}')."
+        return (
+            False,
+            f"Only SELECT queries can be analyzed with EXPLAIN (detected statement type: '{stmt_type}').",
+        )
 
     # Deep scan for prohibited command tokens or nested modifications
     tokens_str = str(stmt).upper()
-    
+
     # Check for semicolon-separated chained queries that might bypass statement splitting
     if ";" in cleaned.rstrip(";"):
         return False, "Multiple SQL statements detected via semicolon separator."
@@ -63,7 +83,9 @@ def validate_explainable_query(query: str) -> tuple[bool, str]:
     for word in re.findall(r"\b[A-Z_]+\b", tokens_str):
         if word in _FORBIDDEN_KEYWORDS:
             # Exception: INTO is allowed only if NOT part of SELECT ... INTO OUTFILE
-            if word == "INTO" and ("OUTFILE" in tokens_str or "DUMPFILE" in tokens_str or "INSERT" in tokens_str):
+            if word == "INTO" and (
+                "OUTFILE" in tokens_str or "DUMPFILE" in tokens_str or "INSERT" in tokens_str
+            ):
                 return False, "File write clauses (INTO OUTFILE/DUMPFILE) are prohibited."
             elif word != "INTO":
                 return False, f"Prohibited operation keyword '{word}' detected."
@@ -75,7 +97,9 @@ def _parse_table_node(table_data: dict[str, Any], warnings: list[str]) -> PlanNo
     """Parse a single MySQL table access block into a PlanNode."""
     table_name = table_data.get("table_name", "unknown_table")
     access_type = table_data.get("access_type", "ALL").upper()
-    rows_examined = int(table_data.get("rows_examined_per_scan", table_data.get("rows_produced_per_join", 1)))
+    rows_examined = int(
+        table_data.get("rows_examined_per_scan", table_data.get("rows_produced_per_join", 1))
+    )
     filtered = float(table_data.get("filtered", 100.0))
     possible_keys = table_data.get("possible_keys", [])
     key_used = table_data.get("key")
@@ -96,7 +120,9 @@ def _parse_table_node(table_data: dict[str, Any], warnings: list[str]) -> PlanNo
     if access_type == "ALL":
         icon = "🔴"
         desc = f"Full Table Scan (ALL) on `{table_name}`"
-        warnings.append(f"Full table scan (ALL) on table `{table_name}` ({rows_examined:,} rows examined).")
+        warnings.append(
+            f"Full table scan (ALL) on table `{table_name}` ({rows_examined:,} rows examined)."
+        )
     elif access_type in ("REF", "EQ_REF", "CONST"):
         icon = "🟢"
         desc = f"Indexed lookup ({access_type}) on `{table_name}` via `{key_used}`"

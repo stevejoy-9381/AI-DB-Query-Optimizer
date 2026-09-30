@@ -32,7 +32,9 @@ def sample_schema() -> SchemaInfo:
         "id": ColumnInfo("id", "int", is_nullable=False, ordinal_position=1),
         "customer_id": ColumnInfo("customer_id", "int", is_nullable=False, ordinal_position=2),
         "order_date": ColumnInfo("order_date", "datetime", is_nullable=False, ordinal_position=3),
-        "total_amount": ColumnInfo("total_amount", "decimal(10,2)", is_nullable=False, ordinal_position=4),
+        "total_amount": ColumnInfo(
+            "total_amount", "decimal(10,2)", is_nullable=False, ordinal_position=4
+        ),
         "status": ColumnInfo("status", "varchar(20)", is_nullable=False, ordinal_position=5),
     }
     orders.indexes = {

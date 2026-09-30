@@ -53,25 +53,27 @@ class CorrelatedSubqueryDetector(BaseDetector):
                 if col.table:
                     tbl_ref = col.table.lower()
                     if tbl_ref in outer_tables and tbl_ref not in inner_tables:
-                        findings.append(Finding(
-                            code=self.code,
-                            severity=self.severity,
-                            score_delta=self.score_delta,
-                            message=(
-                                f"Correlated subquery references outer table/alias `{col.table}`. "
-                                "This executes once per outer row (O(N^2) complexity)."
-                            ),
-                            fix_example=(
-                                "-- Before (Correlated subquery in SELECT/WHERE)\n"
-                                "SELECT c.name, (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) FROM customers c;\n\n"
-                                "-- After (JOIN with aggregation / CTE)\n"
-                                "SELECT c.name, COALESCE(o.order_count, 0)\n"
-                                "FROM customers c\n"
-                                "LEFT JOIN (\n"
-                                "    SELECT customer_id, COUNT(*) AS order_count FROM orders GROUP BY customer_id\n"
-                                ") o ON c.id = o.customer_id;"
-                            ),
-                        ))
+                        findings.append(
+                            Finding(
+                                code=self.code,
+                                severity=self.severity,
+                                score_delta=self.score_delta,
+                                message=(
+                                    f"Correlated subquery references outer table/alias `{col.table}`. "
+                                    "This executes once per outer row (O(N^2) complexity)."
+                                ),
+                                fix_example=(
+                                    "-- Before (Correlated subquery in SELECT/WHERE)\n"
+                                    "SELECT c.name, (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) FROM customers c;\n\n"
+                                    "-- After (JOIN with aggregation / CTE)\n"
+                                    "SELECT c.name, COALESCE(o.order_count, 0)\n"
+                                    "FROM customers c\n"
+                                    "LEFT JOIN (\n"
+                                    "    SELECT customer_id, COUNT(*) AS order_count FROM orders GROUP BY customer_id\n"
+                                    ") o ON c.id = o.customer_id;"
+                                ),
+                            )
+                        )
                         return findings  # Return once per query to avoid spamming
 
         return findings

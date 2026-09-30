@@ -10,7 +10,6 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Any
 
 import requests
 
@@ -27,6 +26,7 @@ def _get_secret_key(key_name: str) -> str | None:
     # 2. Streamlit secrets
     try:
         import streamlit as st
+
         if hasattr(st, "secrets") and key_name in st.secrets:
             return str(st.secrets[key_name]).strip()
     except Exception:
@@ -65,7 +65,9 @@ class GeminiLLMClient(LLMClient):
     """Google Gemini LLM client via Generative Language REST API."""
 
     def __init__(self, api_key: str | None = None, model: str = "gemini-1.5-flash") -> None:
-        self.api_key = api_key or _get_secret_key("GEMINI_API_KEY") or _get_secret_key("GOOGLE_API_KEY")
+        self.api_key = (
+            api_key or _get_secret_key("GEMINI_API_KEY") or _get_secret_key("GOOGLE_API_KEY")
+        )
         if not self.api_key:
             raise ValueError("Gemini API key not found in GEMINI_API_KEY or GOOGLE_API_KEY.")
         self.model = model
@@ -126,7 +128,10 @@ class OpenAILLMClient(LLMClient):
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a MySQL database performance expert. Return JSON only."},
+                {
+                    "role": "system",
+                    "content": "You are a MySQL database performance expert. Return JSON only.",
+                },
                 {"role": "user", "content": prompt},
             ],
             "response_format": {"type": "json_object"},
@@ -162,13 +167,15 @@ class MockLLMClient(LLMClient):
 
     def generate(self, prompt: str, timeout_seconds: int = 10) -> str:
         if self._response_text is None:
-            return json.dumps({
-                "explanation": "Mock LLM analysis: Query is performing well.",
-                "issues": ["SELECT * detected"],
-                "suggested_query": "SELECT id, name FROM users WHERE id = 1;",
-                "suggested_indexes": ["CREATE INDEX idx_users_id ON users(id);"],
-                "confidence": 0.95,
-            })
+            return json.dumps(
+                {
+                    "explanation": "Mock LLM analysis: Query is performing well.",
+                    "issues": ["SELECT * detected"],
+                    "suggested_query": "SELECT id, name FROM users WHERE id = 1;",
+                    "suggested_indexes": ["CREATE INDEX idx_users_id ON users(id);"],
+                    "confidence": 0.95,
+                }
+            )
         return self._response_text
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import plotly.express as px
 import plotly.graph_objects as go
+
 from utils.helpers import score_color
 
 
@@ -72,11 +73,11 @@ def create_optimization_sim_bar(original_score: int, opt_score: int) -> go.Figur
 def create_pattern_detection_bar(analysis: dict) -> go.Figure:
     """Create a detected patterns indicator bar chart."""
     patterns = {
-        "SELECT *":      1 if analysis.get("select_star") else 0,
+        "SELECT *": 1 if analysis.get("select_star") else 0,
         "Missing WHERE": 1 if not analysis.get("has_where") else 0,
-        "JOINs":         min(analysis.get("join_count", 0), 1),
-        "Subqueries":    min(analysis.get("subquery_count", 0), 1),
-        "No LIMIT":      0 if analysis.get("has_limit") else 1,
+        "JOINs": min(analysis.get("join_count", 0), 1),
+        "Subqueries": min(analysis.get("subquery_count", 0), 1),
+        "No LIMIT": 0 if analysis.get("has_limit") else 1,
     }
     fig = px.bar(
         x=list(patterns.keys()),
@@ -121,7 +122,10 @@ def create_waterfall_chart(score_result) -> go.Figure:
             measure=measures,
             x=x_labels,
             textposition="outside",
-            text=[f"{v:+d}" if i > 0 and i < len(y_values) - 1 else f"{v}" for i, v in enumerate(y_values)],
+            text=[
+                f"{v:+d}" if i > 0 and i < len(y_values) - 1 else f"{v}"
+                for i, v in enumerate(y_values)
+            ],
             y=y_values,
             connector={"line": {"color": "#666"}},
             decreasing={"marker": {"color": "#e74c3c"}},
@@ -145,7 +149,7 @@ def create_trendline_chart(history: list[dict]) -> go.Figure:
     """Create score trend chart over time across analyzed queries."""
     indices = list(range(1, len(history) + 1))
     scores = [h["score"] for h in history]
-    queries = [h["query"][:35] + "…" for h in history]
+    queries = [(h.get("query") or h.get("query_snippet") or "Query")[:35] + "…" for h in history]
 
     fig = go.Figure()
     fig.add_trace(

@@ -4,11 +4,12 @@ safety guards against executing non-SELECT queries, and graceful rewrite handlin
 """
 
 import pytest
+
 from analyzer import analyze_query
-from scoring import compute_score
-from rewrite_engine import rewrite_query
 from db.explain import validate_explainable_query
-from db.schema import SchemaInfo, TableInfo, ColumnInfo, IndexInfo
+from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
+from rewrite_engine import rewrite_query
+from scoring import compute_score
 
 
 @pytest.fixture
@@ -20,7 +21,9 @@ def statement_test_schema():
         ColumnInfo("notes", "text", False, "", None),
     ]
     cust_idx = [
-        IndexInfo(name="PRIMARY", table_name="customers", columns=["id"], is_primary=True, is_unique=True),
+        IndexInfo(
+            name="PRIMARY", table_name="customers", columns=["id"], is_primary=True, is_unique=True
+        ),
     ]
     return SchemaInfo(
         database="shop_db",
@@ -37,6 +40,7 @@ def statement_test_schema():
 # ---------------------------------------------------------------------------
 # 1. Statement Type Detection
 # ---------------------------------------------------------------------------
+
 
 def test_detect_select():
     res = analyze_query("SELECT id FROM customers WHERE id = 1;")
@@ -88,6 +92,7 @@ def test_detect_window_function():
 # 2. Critical Safety Rules (UPDATE/DELETE without WHERE)
 # ---------------------------------------------------------------------------
 
+
 def test_update_without_where_critical():
     res = analyze_query("UPDATE customers SET name = 'AllHacked';")
     critical_issues = [i for i in res["issues"] if i["code"] == "UPDATE_WITHOUT_WHERE"]
@@ -125,16 +130,21 @@ def test_delete_with_where_is_not_critical():
 # 3. Unindexed UPDATE/DELETE Locking Hazard
 # ---------------------------------------------------------------------------
 
+
 def test_update_unindexed_where_column(statement_test_schema):
     # notes is not indexed
-    res = analyze_query("UPDATE customers SET name = 'Alice' WHERE notes = 'VIP';", schema=statement_test_schema)
+    res = analyze_query(
+        "UPDATE customers SET name = 'Alice' WHERE notes = 'VIP';", schema=statement_test_schema
+    )
     codes = {i["code"] for i in res["issues"] + res["warnings"]}
     assert "UPDATE_DELETE_UNINDEXED_WHERE" in codes
 
 
 def test_update_indexed_where_column(statement_test_schema):
     # id is indexed (PRIMARY KEY)
-    res = analyze_query("UPDATE customers SET name = 'Alice' WHERE id = 10;", schema=statement_test_schema)
+    res = analyze_query(
+        "UPDATE customers SET name = 'Alice' WHERE id = 10;", schema=statement_test_schema
+    )
     codes = {i["code"] for i in res["issues"] + res["warnings"]}
     assert "UPDATE_DELETE_UNINDEXED_WHERE" not in codes
 
@@ -143,6 +153,7 @@ def test_update_indexed_where_column(statement_test_schema):
 # 4. INSERT Patterns
 # ---------------------------------------------------------------------------
 
+
 def test_insert_single_row_flag():
     res = analyze_query("INSERT INTO customers (id, name) VALUES (1, 'Alice');")
     codes = {i["code"] for i in res["issues"] + res["warnings"]}
@@ -150,7 +161,9 @@ def test_insert_single_row_flag():
 
 
 def test_insert_bulk_rows():
-    res = analyze_query("INSERT INTO customers (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');")
+    res = analyze_query(
+        "INSERT INTO customers (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');"
+    )
     codes = {i["code"] for i in res["issues"] + res["warnings"]}
     assert "INSERT_SINGLE_ROW" not in codes
     score = compute_score(res)
@@ -166,7 +179,9 @@ def test_insert_select_unbounded():
 
 
 def test_insert_select_bounded():
-    res = analyze_query("INSERT INTO archive_orders SELECT * FROM orders WHERE status = 'delivered' LIMIT 1000;")
+    res = analyze_query(
+        "INSERT INTO archive_orders SELECT * FROM orders WHERE status = 'delivered' LIMIT 1000;"
+    )
     codes = {i["code"] for i in res["issues"] + res["warnings"]}
     assert "INSERT_SELECT_UNBOUNDED" not in codes
 
@@ -174,6 +189,7 @@ def test_insert_select_bounded():
 # ---------------------------------------------------------------------------
 # 5. CTE Multiple References & Window Framing
 # ---------------------------------------------------------------------------
+
 
 def test_cte_multiply_referenced():
     q = """
@@ -206,6 +222,7 @@ def test_window_with_partition():
 # 6. Database Safety: Non-SELECT queries blocked from EXPLAIN
 # ---------------------------------------------------------------------------
 
+
 def test_validate_explainable_query_blocks_update():
     valid, reason = validate_explainable_query("UPDATE customers SET name = 'Bob' WHERE id = 1;")
     assert valid is False
@@ -233,6 +250,7 @@ def test_validate_explainable_query_allows_select():
 # ---------------------------------------------------------------------------
 # 7. Rewrite Engine Safety: Unsupported statement type handling
 # ---------------------------------------------------------------------------
+
 
 def test_rewrite_engine_unsupported_statement_type():
     update_sql = "UPDATE customers SET name = 'Bob' WHERE id = 1;"

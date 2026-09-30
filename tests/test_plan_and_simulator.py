@@ -6,8 +6,6 @@ and index impact simulation.
 
 from __future__ import annotations
 
-import pytest
-
 from analyzer import analyze_query
 from execution_plan import (
     PlanNode,

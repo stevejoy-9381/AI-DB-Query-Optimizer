@@ -40,28 +40,30 @@ def main():
 
             diff_issues = regex_issues ^ ast_issues
             diff_warns = regex_warns ^ ast_warns
-            diff_complexity = (regex_res["complexity"] != ast_res["complexity"])
+            diff_complexity = regex_res["complexity"] != ast_res["complexity"]
 
             if diff_issues or diff_warns or diff_complexity:
-                differences.append({
-                    "row": i,
-                    "name": row.get("name", f"Query #{i}"),
-                    "query": query,
-                    "regex_issues": sorted(list(regex_issues)),
-                    "ast_issues": sorted(list(ast_issues)),
-                    "regex_warns": sorted(list(regex_warns)),
-                    "ast_warns": sorted(list(ast_warns)),
-                    "regex_complexity": regex_res["complexity"],
-                    "ast_complexity": ast_res["complexity"],
-                })
+                differences.append(
+                    {
+                        "row": i,
+                        "name": row.get("name", f"Query #{i}"),
+                        "query": query,
+                        "regex_issues": sorted(list(regex_issues)),
+                        "ast_issues": sorted(list(ast_issues)),
+                        "regex_warns": sorted(list(regex_warns)),
+                        "ast_warns": sorted(list(ast_warns)),
+                        "regex_complexity": regex_res["complexity"],
+                        "ast_complexity": ast_res["complexity"],
+                    }
+                )
 
-    print(f"============================================================")
+    print("============================================================")
     print(f"GOLDEN COMPARISON REPORT: AST vs REGEX ({total} queries)")
-    print(f"============================================================")
+    print("============================================================")
     print(f"Total queries analyzed: {total}")
     print(f"Identical pattern detections: {total - len(differences)}")
     print(f"Queries with pattern differences: {len(differences)}")
-    print(f"------------------------------------------------------------\n")
+    print("------------------------------------------------------------\n")
 
     for d in differences:
         print(f"Query #{d['row']}: {d['name']}")

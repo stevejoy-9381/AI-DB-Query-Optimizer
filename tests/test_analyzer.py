@@ -1,15 +1,13 @@
 """Comprehensive unit tests for AST-based SQL query analyzer and QueryFeatures."""
 
-import pytest
-
 from analyzer import analyze_query
-from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
+from db.schema import SchemaInfo, TableInfo
 from query_model import extract_query_features
-
 
 # ---------------------------------------------------------------------------
 # 1. SELECT * and Projection Tests
 # ---------------------------------------------------------------------------
+
 
 def test_select_star_detected():
     """Verify SELECT * triggers SELECT_STAR issue."""
@@ -55,6 +53,7 @@ def test_keyword_inside_comment_not_flagged():
 # 2. WHERE and LIMIT Tests
 # ---------------------------------------------------------------------------
 
+
 def test_missing_where_detected():
     """Verify SELECT without WHERE triggers MISSING_WHERE and MISSING_LIMIT."""
     q = "SELECT id, name FROM customers"
@@ -84,6 +83,7 @@ def test_limit_present_suppresses_missing_limit():
 # 3. JOIN Tests
 # ---------------------------------------------------------------------------
 
+
 def test_join_detected():
     """Verify query with 1-2 joins flags JOIN_DETECTED."""
     q = "SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id"
@@ -110,6 +110,7 @@ def test_excessive_joins_detected():
 # 4. Subquery Tests
 # ---------------------------------------------------------------------------
 
+
 def test_subquery_detected():
     """Verify nested subquery in WHERE flags SUBQUERY_DETECTED."""
     q = "SELECT * FROM orders WHERE customer_id IN (SELECT id FROM customers WHERE state = 'CA')"
@@ -129,6 +130,7 @@ def test_scalar_subquery_in_projection():
 # ---------------------------------------------------------------------------
 # 5. Wildcard LIKE Tests
 # ---------------------------------------------------------------------------
+
 
 def test_leading_wildcard_like_flagged():
     """Verify LIKE '%val' triggers LEADING_WILDCARD warning."""
@@ -155,6 +157,7 @@ def test_like_inside_literal_string_not_flagged():
 # 6. Function on Column in WHERE Tests
 # ---------------------------------------------------------------------------
 
+
 def test_function_on_column_upper():
     """Verify UPPER(col) in WHERE triggers FUNCTION_ON_COLUMN warning."""
     q = "SELECT id FROM users WHERE UPPER(username) = 'ADMIN'"
@@ -179,6 +182,7 @@ def test_sargable_predicate_not_flagged_as_function():
 # ---------------------------------------------------------------------------
 # 7. Aggregation & DISTINCT Tests
 # ---------------------------------------------------------------------------
+
 
 def test_aggregate_full_scan_flagged():
     """Verify aggregate without WHERE or GROUP BY flags AGGREGATE_FULL_SCAN."""
@@ -211,6 +215,7 @@ def test_distinct_without_join_not_flagged():
 # ---------------------------------------------------------------------------
 # 8. Complexity & AST Features
 # ---------------------------------------------------------------------------
+
 
 def test_complexity_classification():
     """Verify Simple, Moderate, and Complex classification logic."""

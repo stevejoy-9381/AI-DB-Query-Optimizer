@@ -5,8 +5,9 @@ tests for each detector.
 """
 
 import pytest
+
 from analyzer import analyze_query
-from db.schema import SchemaInfo, TableInfo, ColumnInfo, IndexInfo
+from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
 
 
 @pytest.fixture
@@ -19,8 +20,16 @@ def mock_schema():
         ColumnInfo("age", "int", False, "", None),
     ]
     cust_idx = [
-        IndexInfo(name="PRIMARY", table_name="customers", columns=["id"], is_primary=True, is_unique=True),
-        IndexInfo(name="idx_phone", table_name="customers", columns=["phone"], is_primary=False, is_unique=False),
+        IndexInfo(
+            name="PRIMARY", table_name="customers", columns=["id"], is_primary=True, is_unique=True
+        ),
+        IndexInfo(
+            name="idx_phone",
+            table_name="customers",
+            columns=["phone"],
+            is_primary=False,
+            is_unique=False,
+        ),
     ]
     customers_table = TableInfo(
         "customers",
@@ -35,8 +44,16 @@ def mock_schema():
         ColumnInfo("status", "varchar(20)", False, "", None),
     ]
     order_idx = [
-        IndexInfo(name="PRIMARY", table_name="orders", columns=["id"], is_primary=True, is_unique=True),
-        IndexInfo(name="idx_orders_cust", table_name="orders", columns=["customer_id"], is_primary=False, is_unique=False),
+        IndexInfo(
+            name="PRIMARY", table_name="orders", columns=["id"], is_primary=True, is_unique=True
+        ),
+        IndexInfo(
+            name="idx_orders_cust",
+            table_name="orders",
+            columns=["customer_id"],
+            is_primary=False,
+            is_unique=False,
+        ),
     ]
     orders_table = TableInfo(
         "orders",
@@ -53,6 +70,7 @@ def mock_schema():
 # ---------------------------------------------------------------------------
 # 1. Correlated Subquery Detector
 # ---------------------------------------------------------------------------
+
 
 def test_correlated_subquery_positive_select():
     q = "SELECT c.name, (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) FROM customers c;"
@@ -86,6 +104,7 @@ def test_correlated_subquery_negative_independent_subquery():
 # 2. OR Across Different Columns Detector
 # ---------------------------------------------------------------------------
 
+
 def test_or_different_columns_positive_1():
     q = "SELECT id FROM orders WHERE customer_id = 42 OR status = 'pending';"
     res = analyze_query(q)
@@ -117,6 +136,7 @@ def test_or_different_columns_negative_and_only():
 # ---------------------------------------------------------------------------
 # 3. Implicit Type Conversion Detector
 # ---------------------------------------------------------------------------
+
 
 def test_implicit_type_conversion_positive_string_compared_to_number(mock_schema):
     q = "SELECT id FROM customers WHERE phone = 1234567890;"
@@ -150,6 +170,7 @@ def test_implicit_type_conversion_negative_number_compared_to_number(mock_schema
 # 4. NOT IN with Subquery Detector
 # ---------------------------------------------------------------------------
 
+
 def test_not_in_subquery_positive_1():
     q = "SELECT id, name FROM customers WHERE id NOT IN (SELECT customer_id FROM orders);"
     res = analyze_query(q)
@@ -181,6 +202,7 @@ def test_not_in_subquery_negative_literal_list():
 # ---------------------------------------------------------------------------
 # 5. ORDER BY RAND() & Unindexed ORDER BY Detectors
 # ---------------------------------------------------------------------------
+
 
 def test_order_by_rand_positive_1():
     q = "SELECT id, name FROM customers ORDER BY RAND() LIMIT 5;"
@@ -215,6 +237,7 @@ def test_unindexed_order_by_positive(mock_schema):
 # 6. Large OFFSET Pagination Detector
 # ---------------------------------------------------------------------------
 
+
 def test_large_offset_positive_explicit_offset():
     q = "SELECT id, name FROM customers ORDER BY id LIMIT 20 OFFSET 5000;"
     res = analyze_query(q)
@@ -246,6 +269,7 @@ def test_large_offset_negative_no_offset():
 # ---------------------------------------------------------------------------
 # 7. Missing JOIN Condition Detector
 # ---------------------------------------------------------------------------
+
 
 def test_missing_join_condition_positive_cross_join():
     q = "SELECT c.name, o.id FROM customers c CROSS JOIN orders o;"
@@ -279,6 +303,7 @@ def test_missing_join_condition_negative_comma_with_where_eq():
 # 8. Non-Sargable Arithmetic Detector
 # ---------------------------------------------------------------------------
 
+
 def test_non_sargable_arithmetic_positive_add():
     q = "SELECT id, total FROM orders WHERE total + 10 > 100;"
     res = analyze_query(q)
@@ -310,6 +335,7 @@ def test_non_sargable_arithmetic_negative_plain_compare():
 # ---------------------------------------------------------------------------
 # 9. HAVING as WHERE Detector
 # ---------------------------------------------------------------------------
+
 
 def test_having_as_where_positive_1():
     q = "SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING customer_id > 100;"
@@ -343,6 +369,7 @@ def test_having_as_where_negative_where_used():
 # 10. COUNT(DISTINCT) Detector
 # ---------------------------------------------------------------------------
 
+
 def test_count_distinct_positive_1():
     q = "SELECT COUNT(DISTINCT customer_id) FROM orders;"
     res = analyze_query(q)
@@ -375,6 +402,7 @@ def test_count_distinct_negative_column_count():
 # 11. Leading Wildcard Detector
 # ---------------------------------------------------------------------------
 
+
 def test_leading_wildcard_positive_percent():
     q = "SELECT id, name FROM customers WHERE name LIKE '%son';"
     res = analyze_query(q)
@@ -406,6 +434,7 @@ def test_leading_wildcard_negative_equality():
 # ---------------------------------------------------------------------------
 # 12. UNION Instead of UNION ALL Detector
 # ---------------------------------------------------------------------------
+
 
 def test_union_all_positive_1():
     q = "SELECT id, total FROM orders WHERE status = 'shipped' UNION SELECT id, total FROM orders WHERE status = 'delivered';"

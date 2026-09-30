@@ -35,7 +35,7 @@ from config import Dialect, get_dialect_config
 from query_model import extract_query_features
 
 if TYPE_CHECKING:
-    from db.schema import SchemaInfo, TableInfo
+    from db.schema import SchemaInfo
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,7 @@ TYPE_BYTE_SIZES: dict[str, int] = {
 # Identifier and Name Helpers
 # ---------------------------------------------------------------------------
 
+
 def _safe_identifier(name: str) -> str:
     """Sanitize identifier to contain only lowercase [a-z0-9_]."""
     cleaned = re.sub(r"[^a-zA-Z0-9_]", "_", name).lower()
@@ -114,6 +115,7 @@ def _generate_safe_index_name(table: str, cols: list[str], prefix: str = "idx") 
 # ---------------------------------------------------------------------------
 # Size and Storage Estimation
 # ---------------------------------------------------------------------------
+
 
 def estimate_index_size_bytes(
     table_name: str,
@@ -168,7 +170,9 @@ def estimate_index_size_bytes(
     elif estimated_total < 1024 * 1024:
         fmt = f"~{estimated_total / 1024:.1f} KB (InnoDB B-tree estimate for {rows:,} rows)"
     elif estimated_total < 1024 * 1024 * 1024:
-        fmt = f"~{estimated_total / (1024 * 1024):.1f} MB (InnoDB B-tree estimate for {rows:,} rows)"
+        fmt = (
+            f"~{estimated_total / (1024 * 1024):.1f} MB (InnoDB B-tree estimate for {rows:,} rows)"
+        )
     else:
         fmt = f"~{estimated_total / (1024 * 1024 * 1024):.2f} GB (InnoDB B-tree estimate for {rows:,} rows)"
 
@@ -189,6 +193,7 @@ def _build_trade_offs_note(table: str, cols: list[str], size_str: str) -> str:
 # Redundant and Duplicate Index Detection
 # ---------------------------------------------------------------------------
 
+
 def detect_redundant_indexes(
     schema: SchemaInfo,
     table_name: str | None = None,
@@ -203,7 +208,8 @@ def detect_redundant_indexes(
     """
     redundancies: list[dict] = []
     tables_to_check = (
-        [schema.get_table(table_name)] if table_name and schema.get_table(table_name)
+        [schema.get_table(table_name)]
+        if table_name and schema.get_table(table_name)
         else list(schema.tables.values())
     )
 
@@ -228,46 +234,50 @@ def detect_redundant_indexes(
                 if cols_a == cols_b:
                     if idx_b.is_primary or idx_b.is_unique or idx_a.name > idx_b.name:
                         drop_ddl = f"DROP INDEX {idx_a.name} ON {tbl.name};"
-                        redundancies.append({
-                            "type": "DUPLICATE_INDEX",
+                        redundancies.append(
+                            {
+                                "type": "DUPLICATE_INDEX",
+                                "table": tbl.name,
+                                "index_name": idx_a.name,
+                                "parent_index": idx_b.name,
+                                "columns": idx_a.columns,
+                                "ddl": drop_ddl,
+                                "reason": (
+                                    f"Index `{idx_a.name}` on `{tbl.name}` is an exact duplicate of `{idx_b.name}` "
+                                    f"({', '.join(idx_a.columns)})."
+                                ),
+                                "warning": (
+                                    "Warning: Review index usage before dropping. Dropping duplicate indexes "
+                                    "eliminates write amplification on DML statements and frees disk space. "
+                                    "Never drop automatically without verifying application dependencies."
+                                ),
+                            }
+                        )
+                        break
+
+                # Case 2: Strict leftmost prefix redundancy
+                elif len(cols_b) > len(cols_a) and cols_b[: len(cols_a)] == cols_a:
+                    drop_ddl = f"DROP INDEX {idx_a.name} ON {tbl.name};"
+                    redundancies.append(
+                        {
+                            "type": "PREFIX_REDUNDANT",
                             "table": tbl.name,
                             "index_name": idx_a.name,
                             "parent_index": idx_b.name,
                             "columns": idx_a.columns,
                             "ddl": drop_ddl,
                             "reason": (
-                                f"Index `{idx_a.name}` on `{tbl.name}` is an exact duplicate of `{idx_b.name}` "
+                                f"Index `{idx_a.name}` ({', '.join(idx_a.columns)}) on `{tbl.name}` is a strict "
+                                f"leftmost prefix of composite index `{idx_b.name}` ({', '.join(idx_b.columns)}). "
+                                f"MySQL's leftmost prefix rule allows `{idx_b.name}` to satisfy all queries using "
                                 f"({', '.join(idx_a.columns)})."
                             ),
                             "warning": (
-                                "Warning: Review index usage before dropping. Dropping duplicate indexes "
-                                "eliminates write amplification on DML statements and frees disk space. "
-                                "Never drop automatically without verifying application dependencies."
+                                "Warning: Before dropping, verify that no FOREIGN KEY constraint explicitly relies "
+                                "on this index name. Dropping redundant indexes reduces storage and write overhead."
                             ),
-                        })
-                        break
-
-                # Case 2: Strict leftmost prefix redundancy
-                elif len(cols_b) > len(cols_a) and cols_b[:len(cols_a)] == cols_a:
-                    drop_ddl = f"DROP INDEX {idx_a.name} ON {tbl.name};"
-                    redundancies.append({
-                        "type": "PREFIX_REDUNDANT",
-                        "table": tbl.name,
-                        "index_name": idx_a.name,
-                        "parent_index": idx_b.name,
-                        "columns": idx_a.columns,
-                        "ddl": drop_ddl,
-                        "reason": (
-                            f"Index `{idx_a.name}` ({', '.join(idx_a.columns)}) on `{tbl.name}` is a strict "
-                            f"leftmost prefix of composite index `{idx_b.name}` ({', '.join(idx_b.columns)}). "
-                            f"MySQL's leftmost prefix rule allows `{idx_b.name}` to satisfy all queries using "
-                            f"({', '.join(idx_a.columns)})."
-                        ),
-                        "warning": (
-                            "Warning: Before dropping, verify that no FOREIGN KEY constraint explicitly relies "
-                            "on this index name. Dropping redundant indexes reduces storage and write overhead."
-                        ),
-                    })
+                        }
+                    )
                     break
 
     return redundancies
@@ -276,6 +286,7 @@ def detect_redundant_indexes(
 # ---------------------------------------------------------------------------
 # Query Extraction Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_projected_columns(query: str) -> list[str]:
     """
@@ -303,7 +314,17 @@ def _extract_projected_columns(query: str) -> list[str]:
             raw_col = raw_col.split(".")[-1]
         clean_col = _safe_identifier(raw_col)
         if clean_col and clean_col not in (
-            "distinct", "top", "null", "all", "true", "false", "count", "sum", "avg", "max", "min"
+            "distinct",
+            "top",
+            "null",
+            "all",
+            "true",
+            "false",
+            "count",
+            "sum",
+            "avg",
+            "max",
+            "min",
         ):
             if clean_col not in cols:
                 cols.append(clean_col)
@@ -325,8 +346,18 @@ def _extract_table_column_pairs(query: str) -> list[tuple[str, str]]:
     )
     for m in alias_pattern:
         table_name = m.group(1).split(".")[-1].lower()
-        alias      = m.group(2).lower()
-        if alias.upper() not in ("WHERE", "ON", "JOIN", "INNER", "LEFT", "RIGHT", "GROUP", "ORDER", "LIMIT"):
+        alias = m.group(2).lower()
+        if alias.upper() not in (
+            "WHERE",
+            "ON",
+            "JOIN",
+            "INNER",
+            "LEFT",
+            "RIGHT",
+            "GROUP",
+            "ORDER",
+            "LIMIT",
+        ):
             alias_map[alias] = table_name
 
     for m in re.finditer(r"\bON\b\s+([\w.]+)\s*=\s*([\w.]+)", query, re.IGNORECASE):
@@ -391,7 +422,10 @@ def _classify_filter_predicates(query: str) -> tuple[list[str], list[str]]:
         cleaned = []
         for item in raw_list:
             col = item.split(".")[-1].lower()
-            if col not in ("and", "or", "not", "null", "true", "false", "1", "0") and col not in cleaned:
+            if (
+                col not in ("and", "or", "not", "null", "true", "false", "1", "0")
+                and col not in cleaned
+            ):
                 cleaned.append(col)
         return cleaned
 
@@ -420,11 +454,19 @@ def _composite_candidate(query: str) -> tuple[str, list[str], dict[str, Any]] | 
         features = extract_query_features(query)
         for ob in features.order_by_cols:
             col_clean = ob.split(".")[-1].lower()
-            if col_clean not in sort_cols and col_clean not in eq_cols and col_clean not in range_cols:
+            if (
+                col_clean not in sort_cols
+                and col_clean not in eq_cols
+                and col_clean not in range_cols
+            ):
                 sort_cols.append(col_clean)
         for gb in features.group_by_cols:
             col_clean = gb.split(".")[-1].lower()
-            if col_clean not in sort_cols and col_clean not in eq_cols and col_clean not in range_cols:
+            if (
+                col_clean not in sort_cols
+                and col_clean not in eq_cols
+                and col_clean not in range_cols
+            ):
                 sort_cols.append(col_clean)
     except Exception:
         pass
@@ -458,11 +500,17 @@ def _composite_candidate(query: str) -> tuple[str, list[str], dict[str, Any]] | 
     # Build plain-English explanation
     exp_parts = []
     if eq_cols:
-        exp_parts.append(f"Equality column(s) ({', '.join(eq_cols)}) placed first to prune non-matching rows immediately")
+        exp_parts.append(
+            f"Equality column(s) ({', '.join(eq_cols)}) placed first to prune non-matching rows immediately"
+        )
     if range_col_used:
-        exp_parts.append(f"Range column (`{range_col_used}`) placed next to bound the B-tree seek interval")
+        exp_parts.append(
+            f"Range column (`{range_col_used}`) placed next to bound the B-tree seek interval"
+        )
     if sort_cols_used:
-        exp_parts.append(f"Sorting column(s) ({', '.join(sort_cols_used)}) placed last to allow reading rows in index order without a filesort pass")
+        exp_parts.append(
+            f"Sorting column(s) ({', '.join(sort_cols_used)}) placed last to allow reading rows in index order without a filesort pass"
+        )
 
     explanation = "; ".join(exp_parts) + "."
 
@@ -494,6 +542,7 @@ def _is_index_redundant(tbl: str, cols: list[str], schema: SchemaInfo | None) ->
 # ---------------------------------------------------------------------------
 # Recommendation Generator and Ranker
 # ---------------------------------------------------------------------------
+
 
 def generate_index_recommendations(
     query: str,
@@ -572,17 +621,19 @@ def generate_index_recommendations(
 
         if idx_name not in seen_names:
             seen_names.add(idx_name)
-            recs.append({
-                "index_name": idx_name,
-                "ddl": ddl,
-                "reason": reason,
-                "estimated_improvement": "Up to 10–100× faster for selective queries (estimated)",
-                "index_type": index_type,
-                "estimated_size": size_str,
-                "trade_offs": trade_offs,
-                "benefit_score": benefit_score,
-                "column_order_explanation": None,
-            })
+            recs.append(
+                {
+                    "index_name": idx_name,
+                    "ddl": ddl,
+                    "reason": reason,
+                    "estimated_improvement": "Up to 10–100× faster for selective queries (estimated)",
+                    "index_type": index_type,
+                    "estimated_size": size_str,
+                    "trade_offs": trade_offs,
+                    "benefit_score": benefit_score,
+                    "column_order_explanation": None,
+                }
+            )
 
     # 2. Composite index recommendations (Leftmost prefix rule with equality -> range -> sort)
     composite = _composite_candidate(query)
@@ -603,9 +654,7 @@ def generate_index_recommendations(
             "first followed by range predicates, satisfying multiple WHERE conditions in a single seek."
         )
         if meta.get("is_capped"):
-            reason_text += (
-                f" (Capped at 4 columns from {meta['original_count']} candidate columns to prevent write overhead)."
-            )
+            reason_text += f" (Capped at 4 columns from {meta['original_count']} candidate columns to prevent write overhead)."
 
         redundant, red_reason = _is_index_redundant(tbl, cols, schema)
         if redundant:
@@ -620,18 +669,20 @@ def generate_index_recommendations(
                 elif tbl_info and tbl_info.estimated_rows > 10_000:
                     comp_score += 15
 
-            recs.append({
-                "index_name": idx_name,
-                "ddl": ddl,
-                "reason": reason_text,
-                "estimated_improvement": "Up to 50× faster than single-column index merges (estimated)",
-                "index_type": "Composite B-tree",
-                "estimated_size": size_str,
-                "trade_offs": trade_offs,
-                "benefit_score": comp_score,
-                "column_order_explanation": meta.get("explanation"),
-                "is_capped": meta.get("is_capped", False),
-            })
+            recs.append(
+                {
+                    "index_name": idx_name,
+                    "ddl": ddl,
+                    "reason": reason_text,
+                    "estimated_improvement": "Up to 50× faster than single-column index merges (estimated)",
+                    "index_type": "Composite B-tree",
+                    "estimated_size": size_str,
+                    "trade_offs": trade_offs,
+                    "benefit_score": comp_score,
+                    "column_order_explanation": meta.get("explanation"),
+                    "is_capped": meta.get("is_capped", False),
+                }
+            )
 
     # 3. Covering index recommendations (MySQL composite index: filter leading + projection trailing)
     if pairs:
@@ -676,7 +727,12 @@ def generate_index_recommendations(
 
         redundant, red_reason = _is_index_redundant(tbl, all_covering_cols, schema)
         if redundant:
-            logger.info("Skipping covering index recommendation on %s(%s): %s", tbl, all_covering_cols, red_reason)
+            logger.info(
+                "Skipping covering index recommendation on %s(%s): %s",
+                tbl,
+                all_covering_cols,
+                red_reason,
+            )
         elif idx_name not in seen_names:
             seen_names.add(idx_name)
             cov_score = 80
@@ -687,24 +743,26 @@ def generate_index_recommendations(
                 elif tbl_info and tbl_info.estimated_rows > 10_000:
                     cov_score += 15
 
-            recs.append({
-                "index_name": idx_name,
-                "ddl": ddl,
-                "reason": reason,
-                "estimated_improvement": "Index-only scan (`Using index`): avoids clustered index row lookups (estimated)",
-                "index_type": index_type,
-                "estimated_size": size_str,
-                "trade_offs": trade_offs,
-                "benefit_score": cov_score,
-                "column_order_explanation": (
-                    f"Leftmost filter column `{filter_col}` satisfies the WHERE clause, followed by projected columns "
-                    f"({', '.join(covered_cols[:3])}) to satisfy the SELECT list without touching the clustered table."
-                ),
-            })
+            recs.append(
+                {
+                    "index_name": idx_name,
+                    "ddl": ddl,
+                    "reason": reason,
+                    "estimated_improvement": "Index-only scan (`Using index`): avoids clustered index row lookups (estimated)",
+                    "index_type": index_type,
+                    "estimated_size": size_str,
+                    "trade_offs": trade_offs,
+                    "benefit_score": cov_score,
+                    "column_order_explanation": (
+                        f"Leftmost filter column `{filter_col}` satisfies the WHERE clause, followed by projected columns "
+                        f"({', '.join(covered_cols[:3])}) to satisfy the SELECT list without touching the clustered table."
+                    ),
+                }
+            )
 
     # 4. FULLTEXT index suggestion for wildcard LIKE patterns
     issue_codes = {i["code"] for i in analysis.get("issues", [])}
-    warn_codes  = {w["code"] for w in analysis.get("warnings", [])}
+    warn_codes = {w["code"] for w in analysis.get("warnings", [])}
     if "LEADING_WILDCARD" in (issue_codes | warn_codes):
         tbl = pairs[0][0] if pairs else "your_table"
         filter_col = pairs[0][1] if pairs else "column_name"
@@ -723,23 +781,27 @@ def generate_index_recommendations(
             )
             index_type = "FULLTEXT (InnoDB)"
         else:
-            fts_ddl = f"CREATE INDEX {fts_name} ON {tbl} USING gin(to_tsvector('english', {filter_col}));"
+            fts_ddl = (
+                f"CREATE INDEX {fts_name} ON {tbl} USING gin(to_tsvector('english', {filter_col}));"
+            )
             reason = "PostgreSQL GIN full-text index."
             index_type = "Full-text (GIN)"
 
         if fts_name not in seen_names:
             seen_names.add(fts_name)
-            recs.append({
-                "index_name": fts_name,
-                "ddl": fts_ddl,
-                "reason": reason,
-                "estimated_improvement": "Sub-millisecond full-text lookup vs full table scan (estimated)",
-                "index_type": index_type,
-                "estimated_size": size_str,
-                "trade_offs": trade_offs,
-                "benefit_score": 70,
-                "column_order_explanation": None,
-            })
+            recs.append(
+                {
+                    "index_name": fts_name,
+                    "ddl": fts_ddl,
+                    "reason": reason,
+                    "estimated_improvement": "Sub-millisecond full-text lookup vs full table scan (estimated)",
+                    "index_type": index_type,
+                    "estimated_size": size_str,
+                    "trade_offs": trade_offs,
+                    "benefit_score": 70,
+                    "column_order_explanation": None,
+                }
+            )
 
     # Rank recommendations by benefit score descending
     recs.sort(key=lambda r: r.get("benefit_score", 0), reverse=True)

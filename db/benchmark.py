@@ -6,7 +6,6 @@ import logging
 import statistics
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -173,7 +172,7 @@ def compare_queries(
             warning="One or both queries failed during benchmark execution.",
         )
 
-    row_match = (orig_metrics.rows_returned == rew_metrics.rows_returned)
+    row_match = orig_metrics.rows_returned == rew_metrics.rows_returned
     warn_msg = None
     if not row_match:
         warn_msg = (

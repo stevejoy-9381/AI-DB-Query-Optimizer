@@ -19,9 +19,9 @@ from enum import Enum
 from typing import Any, Optional
 
 import sqlglot
-from sqlglot import exp
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlglot import exp
 
 from db.explain import validate_explainable_query
 
@@ -39,6 +39,7 @@ class EquivalenceLevel(str, Enum):
 @dataclass
 class ValidationResult:
     """Outcome of validating a query rewrite."""
+
     is_valid_sql: bool
     level: str
     badge_color: str
@@ -119,7 +120,9 @@ def validate_rewrite_static(
     orig_has_limit = orig_ast.find(exp.Limit) is not None
     rew_has_limit = rew_ast.find(exp.Limit) is not None
     if not orig_has_limit and rew_has_limit:
-        details.append("LIMIT clause was injected; query will return fewer total rows than original.")
+        details.append(
+            "LIMIT clause was injected; query will return fewer total rows than original."
+        )
         return ValidationResult(
             is_valid_sql=True,
             level=EquivalenceLevel.CHANGES_RESULTS_SUBSET.value,
@@ -240,13 +243,13 @@ def validate_rewrite_data(
     has_order = sqlglot.parse_one(original_sql).find(exp.Order) is not None
 
     if has_order:
-        matches = (orig_rows == rew_rows)
+        matches = orig_rows == rew_rows
     else:
         # Compare as multisets (Counter of row tuples)
         # Convert rows to string representation to avoid unhashable type issues
         orig_counter = collections.Counter(str(r) for r in orig_rows)
         rew_counter = collections.Counter(str(r) for r in rew_rows)
-        matches = (orig_counter == rew_counter)
+        matches = orig_counter == rew_counter
 
     if matches:
         return ValidationResult(

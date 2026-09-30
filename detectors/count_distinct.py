@@ -32,21 +32,23 @@ class CountDistinctDetector(BaseDetector):
         # Check for COUNT(DISTINCT ...)
         for count_node in features.raw_ast.find_all(exp.Count):
             if count_node.find(exp.Distinct) is not None or count_node.args.get("distinct"):
-                findings.append(Finding(
-                    code=self.code,
-                    severity=self.severity,
-                    score_delta=self.score_delta,
-                    message=(
-                        "COUNT(DISTINCT ...) requires collecting all values in a temporary hash set or filesort "
-                        "to eliminate duplicates, which degrades heavily on large datasets. "
-                        "Also note that COUNT(col) skips NULL values whereas COUNT(*) counts all rows."
-                    ),
-                    fix_example=(
-                        "-- On massive tables, consider summary/rollup tables or hyperloglog approximations:\n"
-                        "SELECT COUNT(DISTINCT customer_id) FROM orders;\n\n"
-                        "-- Or ensure an index covers the distinct column."
-                    ),
-                ))
+                findings.append(
+                    Finding(
+                        code=self.code,
+                        severity=self.severity,
+                        score_delta=self.score_delta,
+                        message=(
+                            "COUNT(DISTINCT ...) requires collecting all values in a temporary hash set or filesort "
+                            "to eliminate duplicates, which degrades heavily on large datasets. "
+                            "Also note that COUNT(col) skips NULL values whereas COUNT(*) counts all rows."
+                        ),
+                        fix_example=(
+                            "-- On massive tables, consider summary/rollup tables or hyperloglog approximations:\n"
+                            "SELECT COUNT(DISTINCT customer_id) FROM orders;\n\n"
+                            "-- Or ensure an index covers the distinct column."
+                        ),
+                    )
+                )
                 break
 
         return findings

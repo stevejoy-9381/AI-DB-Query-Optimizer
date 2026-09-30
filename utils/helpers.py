@@ -4,10 +4,12 @@ Shared utility functions for the SQL Query Optimization Engine.
 """
 
 from __future__ import annotations
-import json
+
 import csv
-import io
 import datetime
+import io
+import json
+
 import sqlparse
 
 
@@ -29,50 +31,51 @@ def format_sql(query: str) -> str:
 def severity_badge(severity: str) -> str:
     """Return an emoji badge for a severity level."""
     return {
-        "HIGH":   "🔴 HIGH",
+        "HIGH": "🔴 HIGH",
         "MEDIUM": "🟡 MEDIUM",
-        "LOW":    "🟢 LOW",
+        "LOW": "🟢 LOW",
     }.get(severity.upper(), severity)
 
 
 def priority_badge(priority: str) -> str:
     """Return an emoji badge for a priority level."""
     return {
-        "HIGH":   "🔴 HIGH",
+        "HIGH": "🔴 HIGH",
         "MEDIUM": "🟡 MEDIUM",
-        "LOW":    "🟢 LOW",
+        "LOW": "🟢 LOW",
     }.get(priority.upper(), priority)
 
 
 def score_color(score: int) -> str:
     """Return a hex color string for a score value."""
     if score >= 80:
-        return "#2ecc71"   # green
+        return "#2ecc71"  # green
     elif score >= 50:
-        return "#f39c12"   # orange
-    return "#e74c3c"       # red
+        return "#f39c12"  # orange
+    return "#e74c3c"  # red
 
 
 def cost_color(cost: str) -> str:
     """Return a hex color for a cost estimate string."""
     return {
-        "LOW":    "#2ecc71",
+        "LOW": "#2ecc71",
         "MEDIUM": "#f39c12",
-        "HIGH":   "#e74c3c",
+        "HIGH": "#e74c3c",
     }.get(cost.upper(), "#95a5a6")
 
 
 def complexity_color(complexity: str) -> str:
     return {
-        "Simple":   "#2ecc71",
+        "Simple": "#2ecc71",
         "Moderate": "#f39c12",
-        "Complex":  "#e74c3c",
+        "Complex": "#e74c3c",
     }.get(complexity, "#95a5a6")
 
 
 # ---------------------------------------------------------------------------
 # Export helpers
 # ---------------------------------------------------------------------------
+
 
 def build_json_report(
     query: str,
@@ -228,14 +231,16 @@ def build_text_report(
 # History helper
 # ---------------------------------------------------------------------------
 
+
 def history_record(query: str, analysis: dict, score: int) -> dict:
     """Build a dict suitable for storing in the session history list."""
     return {
         "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
         "query_snippet": (query.strip().replace("\n", " ")[:80] + "…")
-                         if len(query.strip()) > 80 else query.strip().replace("\n", " "),
+        if len(query.strip()) > 80
+        else query.strip().replace("\n", " "),
         "score": score,
         "complexity": analysis.get("complexity", ""),
-        "cost": "",   # filled in by caller
+        "cost": "",  # filled in by caller
         "issues": len(analysis.get("issues", [])),
     }

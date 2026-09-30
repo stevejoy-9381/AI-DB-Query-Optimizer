@@ -6,7 +6,6 @@ Sends ONLY query, schema metadata, and rule findings. NEVER sends row data.
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -60,10 +59,17 @@ def build_analysis_prompt(
         schema_summary = "\n".join(tbl_lines)
 
     # 2. Format rule-engine findings
-    issues = [f"[{i.get('severity', 'WARN')}] {i.get('message', '')}" for i in analysis.get("issues", [])]
-    warnings = [f"[{w.get('severity', 'INFO')}] {w.get('message', '')}" for w in analysis.get("warnings", [])]
+    issues = [
+        f"[{i.get('severity', 'WARN')}] {i.get('message', '')}" for i in analysis.get("issues", [])
+    ]
+    warnings = [
+        f"[{w.get('severity', 'INFO')}] {w.get('message', '')}"
+        for w in analysis.get("warnings", [])
+    ]
     findings = issues + warnings
-    findings_str = "\n".join(f"- {f}" for f in findings) if findings else "- None detected by static rules"
+    findings_str = (
+        "\n".join(f"- {f}" for f in findings) if findings else "- None detected by static rules"
+    )
 
     prompt_payload = {
         "query": query,
@@ -80,20 +86,20 @@ def build_analysis_prompt(
 DATABASE QUERY AND CONTEXT:
 Query:
 ```sql
-{prompt_payload['query']}
+{prompt_payload["query"]}
 ```
 
-Performance Score: {prompt_payload['performance_score']}
-Complexity: {prompt_payload['complexity']}
+Performance Score: {prompt_payload["performance_score"]}
+Complexity: {prompt_payload["complexity"]}
 
 Rule Engine Findings:
-{prompt_payload['rule_engine_findings']}
+{prompt_payload["rule_engine_findings"]}
 
 Database Schema (Structure Only, No Row Data):
-{prompt_payload['schema_metadata']}
+{prompt_payload["schema_metadata"]}
 
 Execution Plan:
-{prompt_payload['execution_plan_summary']}
+{prompt_payload["execution_plan_summary"]}
 
 REQUIRED JSON OUTPUT FORMAT:
 {{

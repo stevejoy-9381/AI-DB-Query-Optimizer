@@ -24,8 +24,10 @@ logger = logging.getLogger(__name__)
 # 1. Dialect Abstraction
 # ===========================================================================
 
+
 class Dialect(str, Enum):
     """Supported database dialects."""
+
     MYSQL = "mysql"
     POSTGRESQL = "postgresql"
 
@@ -33,6 +35,7 @@ class Dialect(str, Enum):
 @dataclass(frozen=True)
 class DialectConfig:
     """Encapsulates dialect-specific syntax, features, and defaults."""
+
     name: Dialect
     display_name: str
     target_version: str
@@ -158,6 +161,7 @@ def is_mysql() -> bool:
 # 2. Application Settings and Secrets Management
 # ===========================================================================
 
+
 def mask_secret(secret: Optional[str], visible_chars: int = 4) -> str:
     """Mask a secret string for safe logging and presentation.
 
@@ -270,6 +274,7 @@ def load_settings() -> AppSettings:
     # Attempt to load from streamlit secrets if available
     try:
         import streamlit as st
+
         if hasattr(st, "secrets") and st.secrets:
             for k, v in st.secrets.items():
                 if isinstance(v, (str, int, float, bool)):
@@ -285,5 +290,7 @@ def load_settings() -> AppSettings:
     try:
         return AppSettings(_env_file=".env", **merged_env)  # type: ignore[call-arg]
     except Exception as exc:
-        logger.warning("Error loading settings with strict validation: %s. Using default settings.", exc)
+        logger.warning(
+            "Error loading settings with strict validation: %s. Using default settings.", exc
+        )
         return AppSettings()

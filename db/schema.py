@@ -45,7 +45,7 @@ class IndexInfo:
         clean_index = [c.lower() for c in self.columns]
         if len(clean_target) > len(clean_index):
             return False
-        return clean_index[:len(clean_target)] == clean_target
+        return clean_index[: len(clean_target)] == clean_target
 
     def is_exact_match(self, cols: list[str]) -> bool:
         """Check if index has the exact same columns in the same order."""
@@ -58,7 +58,7 @@ class TableInfo:
 
     name: str
     columns: dict[str, ColumnInfo] = field(default_factory=dict)  # Keyed by lowercase column name
-    indexes: dict[str, IndexInfo] = field(default_factory=dict)    # Keyed by lowercase index name
+    indexes: dict[str, IndexInfo] = field(default_factory=dict)  # Keyed by lowercase index name
     estimated_rows: int = 0
     data_length_bytes: int = 0
 
@@ -75,11 +75,19 @@ class TableInfo:
         clean_cols = [c.lower() for c in cols]
         for idx in self.indexes.values():
             if idx.is_exact_match(clean_cols):
-                return True, idx.name, f"Identical index `{idx.name}` ({', '.join(idx.columns)}) already exists."
+                return (
+                    True,
+                    idx.name,
+                    f"Identical index `{idx.name}` ({', '.join(idx.columns)}) already exists.",
+                )
             if idx.covers_prefix(clean_cols):
-                return True, idx.name, (
-                    f"Composite index `{idx.name}` ({', '.join(idx.columns)}) already covers "
-                    f"({', '.join(cols)}) via leftmost prefix."
+                return (
+                    True,
+                    idx.name,
+                    (
+                        f"Composite index `{idx.name}` ({', '.join(idx.columns)}) already covers "
+                        f"({', '.join(cols)}) via leftmost prefix."
+                    ),
                 )
         return False, None, "No covering index found."
 
@@ -192,5 +200,7 @@ def load_schema_from_db(engine: Engine, database: str) -> SchemaInfo:
                     )
                 tbl.indexes[idx_key].columns.append(col_name)
 
-    logger.info("Successfully loaded schema for database '%s' with %d tables.", database, len(schema.tables))
+    logger.info(
+        "Successfully loaded schema for database '%s' with %d tables.", database, len(schema.tables)
+    )
     return schema

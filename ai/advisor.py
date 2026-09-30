@@ -35,8 +35,18 @@ _SESSION_CALL_COUNT = 0
 
 # Forbidden SQL statements in LLM rewrites for safety
 FORBIDDEN_SQL_KEYWORDS = {
-    "DROP", "DELETE", "TRUNCATE", "ALTER", "GRANT", "REVOKE",
-    "INSERT", "UPDATE", "REPLACE", "CREATE", "CALL", "EXEC"
+    "DROP",
+    "DELETE",
+    "TRUNCATE",
+    "ALTER",
+    "GRANT",
+    "REVOKE",
+    "INSERT",
+    "UPDATE",
+    "REPLACE",
+    "CREATE",
+    "CALL",
+    "EXEC",
 }
 
 
@@ -108,7 +118,11 @@ def get_ai_insight(
 
     # Guard 1: Query length
     if len(query) > MAX_QUERY_LENGTH:
-        logger.warning("Query length %d exceeds max %d; falling back to rule engine.", len(query), MAX_QUERY_LENGTH)
+        logger.warning(
+            "Query length %d exceeds max %d; falling back to rule engine.",
+            len(query),
+            MAX_QUERY_LENGTH,
+        )
         return fallback_result
 
     # Resolve client
@@ -121,7 +135,10 @@ def get_ai_insight(
 
     # Guard 2: Session call limit
     if _SESSION_CALL_COUNT >= MAX_SESSION_CALLS:
-        logger.warning("Session LLM call limit reached (%d calls); falling back to rule engine.", MAX_SESSION_CALLS)
+        logger.warning(
+            "Session LLM call limit reached (%d calls); falling back to rule engine.",
+            MAX_SESSION_CALLS,
+        )
         return fallback_result
 
     # Guard 3: Cache lookup
@@ -147,9 +164,13 @@ def get_ai_insight(
 
     for attempt in range(2):
         try:
-            current_prompt = prompt if attempt == 0 else (
-                prompt + "\n\nCRITICAL: Your previous response was invalid JSON. "
-                "Output ONLY a raw JSON object matching the required schema without code fences."
+            current_prompt = (
+                prompt
+                if attempt == 0
+                else (
+                    prompt + "\n\nCRITICAL: Your previous response was invalid JSON. "
+                    "Output ONLY a raw JSON object matching the required schema without code fences."
+                )
             )
             raw_response = client.generate(current_prompt, timeout_seconds=10)
             _SESSION_CALL_COUNT += 1

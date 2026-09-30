@@ -67,7 +67,9 @@ def main() -> None:
         engine = build_engine(config)
         with engine.connect() as _conn:
             pass
-        print(f"Connected to live MySQL database `{config.database}` at {config.host}:{config.port}.")
+        print(
+            f"Connected to live MySQL database `{config.database}` at {config.host}:{config.port}."
+        )
     except Exception as e:
         print(f"Notice: Live database not reachable ({e}). Running static calibration.")
         engine = None
@@ -108,7 +110,9 @@ def main() -> None:
     print(f"\nPearson correlation coefficient (Score vs Execution Latency): r = {r:.4f}")
 
     if r < -0.4:
-        strength = "Moderate-to-Strong Negative Correlation (Desirable: Higher score -> Lower latency)"
+        strength = (
+            "Moderate-to-Strong Negative Correlation (Desirable: Higher score -> Lower latency)"
+        )
     elif r < 0:
         strength = "Weak Negative Correlation (Higher score trends toward lower latency)"
     else:
@@ -116,9 +120,15 @@ def main() -> None:
 
     print(f"Correlation Assessment: {strength}")
     print("\nHonest Engineering Observations:")
-    print("1. Static heuristic scoring reliably catches algorithmic complexity anti-patterns (O(N^2) subqueries, CARTESIAN joins).")
-    print("2. Wall-clock latency on small tables or warm buffer pools can show weak correlation with score because memory-cached full scans run in <1ms.")
-    print("3. When tables exceed buffer pool size, scoring penalty multipliers directly reflect I/O thrashing.")
+    print(
+        "1. Static heuristic scoring reliably catches algorithmic complexity anti-patterns (O(N^2) subqueries, CARTESIAN joins)."
+    )
+    print(
+        "2. Wall-clock latency on small tables or warm buffer pools can show weak correlation with score because memory-cached full scans run in <1ms."
+    )
+    print(
+        "3. When tables exceed buffer pool size, scoring penalty multipliers directly reflect I/O thrashing."
+    )
     print("=" * 70)
 
 

@@ -62,7 +62,9 @@ def test_validate_clean_query():
 
 def test_format_connection_error():
     # Access Denied
-    err = format_connection_error(Exception("Access denied for user 'root'@'localhost' (using password: YES)"))
+    err = format_connection_error(
+        Exception("Access denied for user 'root'@'localhost' (using password: YES)")
+    )
     assert "Authentication Failed" in err["title"]
     assert "password" in err["detail"].lower()
 
@@ -71,7 +73,9 @@ def test_format_connection_error():
     assert "Database Not Found" in err["title"]
 
     # Host unreachable
-    err = format_connection_error(Exception("(2003, \"Can't connect to MySQL server on '127.0.0.1:3306'\")"))
+    err = format_connection_error(
+        Exception("(2003, \"Can't connect to MySQL server on '127.0.0.1:3306'\")")
+    )
     assert "Host Unreachable" in err["title"]
 
     # Timeout

@@ -26,6 +26,7 @@ def format_sqlglot_pretty(sql: str, dialect: str = "mysql") -> str:
 @dataclass
 class DiffLine:
     """Single line in a side-by-side diff."""
+
     line_num: int | None
     text: str
     tag: Literal["equal", "insert", "delete", "replace", "empty"]
@@ -34,6 +35,7 @@ class DiffLine:
 @dataclass
 class SideBySideDiff:
     """Structured representation of side-by-side diff."""
+
     left_lines: list[DiffLine] = field(default_factory=list)
     right_lines: list[DiffLine] = field(default_factory=list)
     lines_added: int = 0
@@ -92,19 +94,19 @@ def generate_side_by_side_diff(
                 else:
                     right_result.append(DiffLine(None, "", "empty"))
         elif tag == "delete":
-            lines_removed += (i2 - i1)
+            lines_removed += i2 - i1
             for k in range(i1, i2):
                 left_result.append(DiffLine(orig_idx, orig_lines[k], "delete"))
                 right_result.append(DiffLine(None, "", "empty"))
                 orig_idx += 1
         elif tag == "insert":
-            lines_added += (j2 - j1)
+            lines_added += j2 - j1
             for k in range(j1, j2):
                 left_result.append(DiffLine(None, "", "empty"))
                 right_result.append(DiffLine(rew_idx, rew_lines[k], "insert"))
                 rew_idx += 1
 
-    has_changes = (lines_added > 0 or lines_removed > 0 or lines_modified > 0)
+    has_changes = lines_added > 0 or lines_removed > 0 or lines_modified > 0
     return SideBySideDiff(
         left_lines=left_result,
         right_lines=right_result,
@@ -121,11 +123,11 @@ def render_diff_html(diff: SideBySideDiff) -> str:
     right_rows = []
 
     style_map = {
-        "equal":   "background: transparent; color: inherit;",
-        "insert":  "background: rgba(46, 204, 113, 0.22); color: #2ecc71; font-weight: 600; border-left: 3px solid #2ecc71;",
-        "delete":  "background: rgba(231, 76, 60, 0.22); color: #e74c3c; font-weight: 600; border-left: 3px solid #e74c3c;",
+        "equal": "background: transparent; color: inherit;",
+        "insert": "background: rgba(46, 204, 113, 0.22); color: #2ecc71; font-weight: 600; border-left: 3px solid #2ecc71;",
+        "delete": "background: rgba(231, 76, 60, 0.22); color: #e74c3c; font-weight: 600; border-left: 3px solid #e74c3c;",
         "replace": "background: rgba(243, 156, 18, 0.20); color: #f39c12; font-weight: 600; border-left: 3px solid #f39c12;",
-        "empty":   "background: rgba(255, 255, 255, 0.02); color: transparent; user-select: none;",
+        "empty": "background: rgba(255, 255, 255, 0.02); color: transparent; user-select: none;",
     }
 
     prefix_map = {

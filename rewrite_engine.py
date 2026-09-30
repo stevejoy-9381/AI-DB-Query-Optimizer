@@ -25,14 +25,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _COLUMN_HINTS: dict[str, list[str]] = {
-    "users":        ["id", "name", "email", "created_at"],
-    "customers":    ["id", "name", "email", "phone"],
-    "orders":       ["id", "customer_id", "total", "status", "created_at"],
-    "order_items":  ["id", "order_id", "product_id", "quantity", "price"],
-    "products":     ["id", "name", "price", "category_id"],
-    "employees":    ["id", "name", "department", "salary"],
-    "logs":         ["id", "user_id", "action", "created_at"],
-    "sessions":     ["id", "user_id", "status", "started_at"],
+    "users": ["id", "name", "email", "created_at"],
+    "customers": ["id", "name", "email", "phone"],
+    "orders": ["id", "customer_id", "total", "status", "created_at"],
+    "order_items": ["id", "order_id", "product_id", "quantity", "price"],
+    "products": ["id", "name", "price", "category_id"],
+    "employees": ["id", "name", "department", "salary"],
+    "logs": ["id", "user_id", "action", "created_at"],
+    "sessions": ["id", "user_id", "status", "started_at"],
 }
 
 
@@ -57,6 +57,7 @@ def _format_sql(sql: str) -> str:
 # ---------------------------------------------------------------------------
 # Base Rewrite Rule
 # ---------------------------------------------------------------------------
+
 
 class RewriteRule(ABC):
     """Abstract base class for AST query rewrite transformations."""
@@ -94,6 +95,7 @@ class RewriteRule(ABC):
 # Concrete Rules
 # ---------------------------------------------------------------------------
 
+
 class InSubqueryToExistsRule(RewriteRule):
     """Transforms col IN (SELECT col FROM ...) to EXISTS (SELECT 1 FROM ... WHERE ...)."""
 
@@ -101,14 +103,26 @@ class InSubqueryToExistsRule(RewriteRule):
     description = "Rewrites IN (subquery) to EXISTS to avoid materializing large subquery sets."
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         for in_node in ast.find_all(exp.In):
             is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
             if in_node.find(exp.Select) and not is_negated:
                 return True
         return False
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         modified = False
         for in_node in list(ast.find_all(exp.In)):
             is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
@@ -123,15 +137,22 @@ class InSubqueryToExistsRule(RewriteRule):
                     if sub_where:
                         corr_cond = f"{sub_where.this.sql(dialect='mysql')} AND {sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
                     else:
-                        corr_cond = f"{sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+                        corr_cond = (
+                            f"{sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+                        )
 
-                    exists_str = f"EXISTS (SELECT 1 FROM {sub_tbl.sql(dialect='mysql')} WHERE {corr_cond})"
+                    exists_str = (
+                        f"EXISTS (SELECT 1 FROM {sub_tbl.sql(dialect='mysql')} WHERE {corr_cond})"
+                    )
                     new_node = sqlglot.parse_one(exists_str, read="mysql")
                     in_node.replace(new_node)
                     modified = True
                     break
 
-        return modified, "Rewrote IN (subquery) to EXISTS to avoid materializing intermediate subquery results."
+        return (
+            modified,
+            "Rewrote IN (subquery) to EXISTS to avoid materializing intermediate subquery results.",
+        )
 
 
 class NotInSubqueryToNotExistsRule(RewriteRule):
@@ -141,14 +162,26 @@ class NotInSubqueryToNotExistsRule(RewriteRule):
     description = "Eliminates dangerous NULL-trap and allows MySQL anti-join optimization."
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         for in_node in ast.find_all(exp.In):
             is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
             if is_negated and in_node.find(exp.Select):
                 return True
         return False
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         modified = False
         for in_node in list(ast.find_all(exp.In)):
             is_negated = in_node.args.get("is_negated") or isinstance(in_node.parent, exp.Not)
@@ -162,18 +195,25 @@ class NotInSubqueryToNotExistsRule(RewriteRule):
                     if sub_where:
                         corr_cond = f"{sub_where.this.sql(dialect='mysql')} AND {sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
                     else:
-                        corr_cond = f"{sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+                        corr_cond = (
+                            f"{sub_col.sql(dialect='mysql')} = {left_col.sql(dialect='mysql')}"
+                        )
 
                     not_exists_str = f"NOT EXISTS (SELECT 1 FROM {sub_tbl.sql(dialect='mysql')} WHERE {corr_cond})"
                     new_node = sqlglot.parse_one(not_exists_str, read="mysql")
 
                     # If parent was exp.Not, replace parent; otherwise replace in_node
-                    target_replace = in_node.parent if isinstance(in_node.parent, exp.Not) else in_node
+                    target_replace = (
+                        in_node.parent if isinstance(in_node.parent, exp.Not) else in_node
+                    )
                     target_replace.replace(new_node)
                     modified = True
                     break
 
-        return modified, "Rewrote NOT IN (subquery) to NOT EXISTS, eliminating NULL-trap hazard and enabling anti-join index seeks."
+        return (
+            modified,
+            "Rewrote NOT IN (subquery) to NOT EXISTS, eliminating NULL-trap hazard and enabling anti-join index seeks.",
+        )
 
 
 class DateYearFunctionToRangeRule(RewriteRule):
@@ -183,46 +223,73 @@ class DateYearFunctionToRangeRule(RewriteRule):
     description = "Converts YEAR(date_col) = YYYY into a range scan (date_col >= YYYY-01-01 AND date_col < (YYYY+1)-01-01)."
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         where_node = ast.find(exp.Where)
         if not where_node:
             return False
         for eq in where_node.find_all(exp.EQ):
-            if isinstance(eq.this, exp.Year) or (hasattr(eq.this, "key") and eq.this.key.lower() == "year"):
+            if isinstance(eq.this, exp.Year) or (
+                hasattr(eq.this, "key") and eq.this.key.lower() == "year"
+            ):
                 if isinstance(eq.expression, exp.Literal) and eq.expression.is_number:
                     return True
         return False
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         modified = False
         where_node = ast.find(exp.Where)
         if where_node:
             for eq in list(where_node.find_all(exp.EQ)):
-                if isinstance(eq.this, exp.Year) or (hasattr(eq.this, "key") and eq.this.key.lower() == "year"):
+                if isinstance(eq.this, exp.Year) or (
+                    hasattr(eq.this, "key") and eq.this.key.lower() == "year"
+                ):
                     col = eq.this.find(exp.Column)
                     if col and isinstance(eq.expression, exp.Literal) and eq.expression.is_number:
                         try:
                             year_val = int(eq.expression.this)
                             col_str = col.sql(dialect="mysql")
                             new_pred = sqlglot.parse_one(
-                                f"{col_str} >= '{year_val}-01-01' AND {col_str} < '{year_val+1}-01-01'",
+                                f"{col_str} >= '{year_val}-01-01' AND {col_str} < '{year_val + 1}-01-01'",
                                 read="mysql",
                             )
                             eq.replace(new_pred)
                             modified = True
                         except ValueError:
                             pass
-        return modified, "Transformed YEAR(column) filter into a sargable date range, enabling B-tree range seek."
+        return (
+            modified,
+            "Transformed YEAR(column) filter into a sargable date range, enabling B-tree range seek.",
+        )
 
 
 class RemoveRedundantDistinctRule(RewriteRule):
     """Removes redundant SELECT DISTINCT when a verified unique or primary key column is projected."""
 
     name = "Remove Redundant DISTINCT"
-    description = "Removes DISTINCT if the projection already includes the table's primary or unique key."
+    description = (
+        "Removes DISTINCT if the projection already includes the table's primary or unique key."
+    )
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         if not schema or not features.has_distinct:
             return False
         if len(features.tables) != 1:
@@ -246,10 +313,19 @@ class RemoveRedundantDistinctRule(RewriteRule):
                 return True
         return False
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         if isinstance(ast, exp.Select) and ast.args.get("distinct"):
             ast.set("distinct", None)
-            return True, "Removed redundant DISTINCT: A primary or unique key is selected, guaranteeing row uniqueness without filesort."
+            return (
+                True,
+                "Removed redundant DISTINCT: A primary or unique key is selected, guaranteeing row uniqueness without filesort.",
+            )
         return False, ""
 
 
@@ -260,29 +336,52 @@ class UnionToUnionAllRule(RewriteRule):
     description = "Replaces UNION with UNION ALL to stream rows directly without temporary table deduplication."
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         for u in ast.find_all(exp.Union):
             if u.args.get("distinct", True):
                 return True
         return False
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         modified = False
         for u in list(ast.find_all(exp.Union)):
             if u.args.get("distinct", True):
                 u.set("distinct", False)
                 modified = True
-        return modified, "Replaced UNION with UNION ALL to stream rows directly, avoiding internal temporary table filesort."
+        return (
+            modified,
+            "Replaced UNION with UNION ALL to stream rows directly, avoiding internal temporary table filesort.",
+        )
 
 
 class FunctionOnColumnRule(RewriteRule):
     """Transforms UPPER(col) = 'CONST' into col = LOWER('CONST')."""
 
     name = "Transform Function on Column"
-    description = "Transforms function application to constant value so index on column can be used."
+    description = (
+        "Transforms function application to constant value so index on column can be used."
+    )
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         where_node = ast.find(exp.Where)
         if not where_node:
             return False
@@ -294,7 +393,13 @@ class FunctionOnColumnRule(RewriteRule):
                     return True
         return False
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         modified = False
         where_node = ast.find(exp.Where)
         if where_node:
@@ -303,14 +408,23 @@ class FunctionOnColumnRule(RewriteRule):
                     raw_name = getattr(eq.this, "key", None) or getattr(eq.this, "name", "") or ""
                     func_name = str(raw_name).upper()
                     col = eq.this.find(exp.Column)
-                    if func_name in ("UPPER", "LOWER") and col and isinstance(eq.expression, exp.Literal):
+                    if (
+                        func_name in ("UPPER", "LOWER")
+                        and col
+                        and isinstance(eq.expression, exp.Literal)
+                    ):
                         val_str = str(eq.expression.this).strip("'\"")
                         target_val = val_str.lower() if func_name == "UPPER" else val_str.upper()
-                        new_node = sqlglot.parse_one(f"{col.sql(dialect='mysql')} = '{target_val}'", read="mysql")
+                        new_node = sqlglot.parse_one(
+                            f"{col.sql(dialect='mysql')} = '{target_val}'", read="mysql"
+                        )
                         eq.replace(new_node)
                         modified = True
                         break
-        return modified, "Inverted case transformation from column to literal, making the predicate sargable."
+        return (
+            modified,
+            "Inverted case transformation from column to literal, making the predicate sargable.",
+        )
 
 
 class SelectStarRewriteRule(RewriteRule):
@@ -320,10 +434,22 @@ class SelectStarRewriteRule(RewriteRule):
     description = "Replaces wildcard SELECT * with explicit column projection."
     safety_level = EquivalenceLevel.VERIFIED_EQUIVALENT.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         return features.select_star
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         modified = False
         if not isinstance(ast, exp.Select):
             return False, ""
@@ -350,8 +476,15 @@ class SelectStarRewriteRule(RewriteRule):
 
         if modified:
             ast.set("expressions", new_expressions)
-            source_desc = "live schema metadata" if schema and schema.get_table(table_name) else "suggested column profile"
-            return True, f"Replaced SELECT * with explicit column list ({', '.join(cols[:4])}...) derived from {source_desc}."
+            source_desc = (
+                "live schema metadata"
+                if schema and schema.get_table(table_name)
+                else "suggested column profile"
+            )
+            return (
+                True,
+                f"Replaced SELECT * with explicit column list ({', '.join(cols[:4])}...) derived from {source_desc}.",
+            )
 
         return False, ""
 
@@ -363,16 +496,31 @@ class LimitInjectionRule(RewriteRule):
     description = "Appends LIMIT 100 to bound result set and protect memory buffers."
     safety_level = EquivalenceLevel.CHANGES_RESULTS_SUBSET.value
 
-    def applies(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> bool:
+    def applies(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> bool:
         allow_limit = kwargs.get("allow_limit_injection", True)
         if not allow_limit:
             return False
         return features.statement_type == "SELECT" and features.limit is None
 
-    def apply(self, ast: exp.Expression, features: QueryFeatures, schema: Optional[SchemaInfo] = None, **kwargs: Any) -> tuple[bool, str]:
+    def apply(
+        self,
+        ast: exp.Expression,
+        features: QueryFeatures,
+        schema: Optional[SchemaInfo] = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
         if isinstance(ast, exp.Select) and not ast.find(exp.Limit):
             ast.set("limit", exp.Limit(expression=exp.Literal.number(100)))
-            return True, "Appended LIMIT 100 to guard application memory against unbounded result scans."
+            return (
+                True,
+                "Appended LIMIT 100 to guard application memory against unbounded result scans.",
+            )
         return False, ""
 
 
@@ -395,6 +543,7 @@ REWRITE_RULES_REGISTRY: list[RewriteRule] = [
 # ---------------------------------------------------------------------------
 # Public Entrypoint
 # ---------------------------------------------------------------------------
+
 
 def rewrite_query(
     query: str,
@@ -432,7 +581,9 @@ def rewrite_query(
         return {
             "original": _format_sql(cleaned_query),
             "rewritten": _format_sql(cleaned_query),
-            "changes": [f"No automatic rewrite available for {stmt_type} statements (safe analysis only)."],
+            "changes": [
+                f"No automatic rewrite available for {stmt_type} statements (safe analysis only)."
+            ],
             "is_changed": False,
             "rewrite_score_est": 0,
             "validation": val.to_dict(),
@@ -482,17 +633,19 @@ def rewrite_query(
     formatted_rewritten = _format_sql(ast.sql(dialect=dialect))
 
     # Validate rewritten result
-    validation = validate_rewrite_static(cleaned_query, formatted_rewritten, changes, dialect=dialect)
+    validation = validate_rewrite_static(
+        cleaned_query, formatted_rewritten, changes, dialect=dialect
+    )
 
     # Estimate score gain
     score_delta = min(len(changes) * 12, 50)
 
     return {
-        "original":          formatted_original,
-        "rewritten":         formatted_rewritten,
-        "changes":           changes,
-        "is_changed":        len(changes) > 0,
+        "original": formatted_original,
+        "rewritten": formatted_rewritten,
+        "changes": changes,
+        "is_changed": len(changes) > 0,
         "rewrite_score_est": score_delta,
-        "validation":        validation.to_dict(),
-        "supported":         True,
+        "validation": validation.to_dict(),
+        "supported": True,
     }

@@ -59,24 +59,28 @@ class ImplicitTypeConversionDetector(BaseDetector):
                     col_info = table_info.get_column(col_node.name)
                     if col_info:
                         col_type = col_info.data_type.upper()
-                        is_string_col = any(t in col_type for t in ("VARCHAR", "CHAR", "TEXT", "ENUM"))
+                        is_string_col = any(
+                            t in col_type for t in ("VARCHAR", "CHAR", "TEXT", "ENUM")
+                        )
 
                         if is_string_col and literal_node.is_number:
-                            findings.append(Finding(
-                                code=self.code,
-                                severity=self.severity,
-                                score_delta=self.score_delta,
-                                message=(
-                                    f"Column `{col_node.name}` is {col_type}, but is compared to a numeric literal `{literal_node.this}`. "
-                                    "MySQL converts the column to a floating-point number for every row, disabling index usage."
-                                ),
-                                fix_example=(
-                                    f"-- Before (Forces full table scan)\n"
-                                    f"WHERE {col_node.name} = {literal_node.this};\n\n"
-                                    f"-- After (Uses index)\n"
-                                    f"WHERE {col_node.name} = '{literal_node.this}';"
-                                ),
-                            ))
+                            findings.append(
+                                Finding(
+                                    code=self.code,
+                                    severity=self.severity,
+                                    score_delta=self.score_delta,
+                                    message=(
+                                        f"Column `{col_node.name}` is {col_type}, but is compared to a numeric literal `{literal_node.this}`. "
+                                        "MySQL converts the column to a floating-point number for every row, disabling index usage."
+                                    ),
+                                    fix_example=(
+                                        f"-- Before (Forces full table scan)\n"
+                                        f"WHERE {col_node.name} = {literal_node.this};\n\n"
+                                        f"-- After (Uses index)\n"
+                                        f"WHERE {col_node.name} = '{literal_node.this}';"
+                                    ),
+                                )
+                            )
                             break
 
         return findings

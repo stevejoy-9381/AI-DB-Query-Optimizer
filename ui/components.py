@@ -6,7 +6,8 @@ Reusable HTML and CSS UI components, custom styles, and header elements.
 from __future__ import annotations
 
 import streamlit as st
-from utils.helpers import score_color, severity_badge
+
+from utils.helpers import score_color
 
 
 def render_styles() -> None:
@@ -98,6 +99,6 @@ def render_score_card(score: int, label: str = "PERFORMANCE SCORE") -> None:
         f'<div class="score-card">'
         f'<div class="score-number" style="color:{color}">{score}</div>'
         f'<div class="score-label">{label}</div>'
-        f'</div>',
+        f"</div>",
         unsafe_allow_html=True,
     )

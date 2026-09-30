@@ -36,28 +36,30 @@ class NotInSubqueryDetector(BaseDetector):
             if is_negated:
                 subquery = in_node.find(exp.Select)
                 if subquery:
-                    findings.append(Finding(
-                        code=self.code,
-                        severity=self.severity,
-                        score_delta=self.score_delta,
-                        message=(
-                            "NOT IN with a subquery is risky and slow. If the subquery returns any NULL, "
-                            "the entire condition evaluates to UNKNOWN, returning zero rows. "
-                            "Furthermore, MySQL cannot optimize NOT IN as effectively as NOT EXISTS or an anti-join."
-                        ),
-                        fix_example=(
-                            "-- Before\n"
-                            "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM orders);\n\n"
-                            "-- After (NOT EXISTS - NULL-safe and index-friendly)\n"
-                            "SELECT * FROM customers c WHERE NOT EXISTS (\n"
-                            "    SELECT 1 FROM orders o WHERE o.customer_id = c.id\n"
-                            ");\n\n"
-                            "-- Or Anti-Join\n"
-                            "SELECT c.* FROM customers c\n"
-                            "LEFT JOIN orders o ON c.id = o.customer_id\n"
-                            "WHERE o.customer_id IS NULL;"
-                        ),
-                    ))
+                    findings.append(
+                        Finding(
+                            code=self.code,
+                            severity=self.severity,
+                            score_delta=self.score_delta,
+                            message=(
+                                "NOT IN with a subquery is risky and slow. If the subquery returns any NULL, "
+                                "the entire condition evaluates to UNKNOWN, returning zero rows. "
+                                "Furthermore, MySQL cannot optimize NOT IN as effectively as NOT EXISTS or an anti-join."
+                            ),
+                            fix_example=(
+                                "-- Before\n"
+                                "SELECT * FROM customers WHERE id NOT IN (SELECT customer_id FROM orders);\n\n"
+                                "-- After (NOT EXISTS - NULL-safe and index-friendly)\n"
+                                "SELECT * FROM customers c WHERE NOT EXISTS (\n"
+                                "    SELECT 1 FROM orders o WHERE o.customer_id = c.id\n"
+                                ");\n\n"
+                                "-- Or Anti-Join\n"
+                                "SELECT c.* FROM customers c\n"
+                                "LEFT JOIN orders o ON c.id = o.customer_id\n"
+                                "WHERE o.customer_id IS NULL;"
+                            ),
+                        )
+                    )
                     break
 
         return findings

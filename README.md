@@ -22,6 +22,63 @@ The codebase defaults to **MySQL 8.x** conventions and features a modular dialec
 
 ---
 
+## 📸 Visual Walkthrough & Interface Preview
+
+> **Authentic Product Visuals:** All previews below are captured directly from the live application running in offline demo mode. No credentials, tokens, or private data are shown. For a step-by-step recording guide, see [`docs/DEMO_RECORDING_GUIDE.md`](docs/DEMO_RECORDING_GUIDE.md).
+
+<div align="center">
+  <img src="docs/screenshots/demo_walkthrough.gif" alt="MySQL Query Optimizer & Index Recommender Animated Walkthrough" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);" />
+  <p><em>Demo Walkthrough: Interactive Query Analysis, Metric Gauges, Heuristic Plan Tree, AST Diff, and Persistent History</em></p>
+</div>
+
+### 1. Analysis Dashboard & Health Score Gauge
+The **Query Analyzer** delivers an instant 0–100 quality score, complexity tier, heuristic cost band, and an explainable waterfall breakdown identifying exact penalty deductions.
+
+![Query Analysis Dashboard](docs/screenshots/02_query_analysis_dashboard.png)
+*Figure 1: Query Analyzer KPI row, health gauge, and optimization simulation.*
+
+---
+
+### 2. Multi-Pattern Diagnostics & Composite Index Recommendations
+Detects 12+ critical SQL anti-patterns (such as non-sargable functions, leading wildcards, correlated subqueries, and large offsets) and generates valid MySQL 8.x composite and covering `CREATE INDEX` statements.
+
+![Anti-Pattern Findings and Index Advice](docs/screenshots/03_antipattern_findings_and_index_advice.png)
+*Figure 2: Detected anti-pattern breakdown and MySQL 8.x DDL recommendations.*
+
+---
+
+### 3. Execution Plan Tree Visualizer
+Interactive hierarchical representation of MySQL access methods (`ALL`, `ref`, `range`, `index`, `filesort`, `Using temporary`) with color-coded node severity.
+
+![Query Execution Plan Visualizer](docs/screenshots/04_execution_plan_visualizer.png)
+*Figure 3: Simulated MySQL 8.x EXPLAIN execution plan tree.*
+
+---
+
+### 4. Index Impact Simulator
+Estimates scan volume reductions, execution time improvements, and potential score gains before applying DDL.
+
+![Index Impact Simulator](docs/screenshots/05_index_impact_simulator.png)
+*Figure 4: Before vs After index simulation with estimated speedup multipliers.*
+
+---
+
+### 5. AST-Powered Side-by-Side Query Rewrite Diff
+Transforms anti-patterns into optimized SQL with semantic trust badges (`Verified equivalent` or `Changes results (opt-in LIMIT)`).
+
+![Query Rewrite Side-by-Side Diff](docs/screenshots/06_rewrite_side_by_side_diff.png)
+*Figure 5: Side-by-side AST comparison highlighting explicit column projections and rewritten filters.*
+
+---
+
+### 6. Persistent Query History (SQLite)
+Survives browser reloads and server restarts. Includes search, score filtering, and side-by-side historical comparison.
+
+![Persistent SQLite Query History](docs/screenshots/07_persistent_query_history.png)
+*Figure 6: Persistent historical query log with filtering and export capabilities.*
+
+---
+
 ## ⚡ What It Does Today
 
 The following table reflects the actual state of the codebase today:
@@ -222,6 +279,229 @@ streamlit run app.py
 ```
 Open your browser and navigate to **http://localhost:8501**.
 
+### 7. Run the React + FastAPI QA Test Harness
+
+The repository includes an independent QA testing harness with a dedicated FastAPI backend and React 18 + TypeScript frontend to exercise every engine component directly.
+
+#### Start the FastAPI Backend:
+```bash
+uvicorn api.main:app --port 8001 --reload
+```
+Interactive OpenAPI documentation will be available at **http://localhost:8001/docs**.
+
+#### Start the React Frontend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open your browser and navigate to **http://localhost:5173**.
+
+| Component | Default Port | Description |
+|-----------|--------------|-------------|
+| **Streamlit App** | `8501` | Original interactive Streamlit dashboard |
+| **FastAPI Backend** | `8001` | REST API exposing 9 engine endpoints (`/api/*`) |
+| **React Test Harness** | `5173` | Vite + React + TS UI for independent verification |
+
+---
+
+## 📐 Architecture & System Design
+
+> For a detailed module-by-module breakdown and engineering rationale, see the full [System Architecture Document](docs/ARCHITECTURE.md).
+
+### Component Diagram
+
+```mermaid
+graph TD
+    classDef real fill:#1b4d3e,stroke:#2ecc71,stroke-width:2px,color:#fff;
+    classDef sim fill:#5c3a21,stroke:#e67e22,stroke-width:2px,color:#fff;
+    classDef ui fill:#1f2937,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef db fill:#2c3e50,stroke:#9b59b6,stroke-width:2px,color:#fff;
+
+    subgraph UI_Layer ["Presentation Layer (Streamlit)"]
+        APP["app.py (Entrypoint)"]:::ui
+        SB["ui/sidebar.py (Connection & Schema Controls)"]:::ui
+        TAB1["ui/tab_analyzer.py (Diagnostics & Scoring)"]:::ui
+        TAB2["ui/tab_history.py (SQLite History Explorer)"]:::ui
+        TAB5["ui/tab_advanced.py (Plan, Diff, Benchmark)"]:::ui
+    end
+
+    subgraph Core_Engine ["Analysis & Rewriting Engine"]
+        VAL["utils/validation.py (Security & Bounds Check)"]:::real
+        PARSER["query_model.py (sqlglot MySQL AST Extractor)"]:::real
+        DETECTORS["detectors/ & analyzer.py (12+ Anti-Pattern Plugins)"]:::real
+        SCORING["scoring.py & scoring_rules.py (0-100 Quality Math)"]:::real
+        RECS["recommendations.py (MySQL 8.x Index DDL)"]:::real
+        REWRITE["rewrite_engine.py (AST Transformations)"]:::real
+        RW_VAL["rewrite_validation.py (Multiset & AST Equivalence)"]:::real
+    end
+
+    subgraph Simulation_Layer ["Heuristic Simulation Layer"]
+        PLAN_SIM["execution_plan.py (Simulated EXPLAIN Tree)"]:::sim
+        IMPACT_SIM["simulator.py (Latency & Scan Multipliers)"]:::sim
+    end
+
+    subgraph Live_DB_Layer ["Live Database Integration"]
+        DBCONN["db/connection.py (SQLAlchemy + PyMySQL Pool)"]:::db
+        DBSCHEMA["db/schema.py (information_schema Introspection)"]:::db
+        DBEXPLAIN["db/explain.py (Live EXPLAIN / ANALYZE Guard)"]:::db
+        DBBENCH["db/benchmark.py (Multi-run Statistical Timer)"]:::db
+    end
+
+    subgraph Persistence_AI ["Persistence & Optional AI"]
+        STORE["history_store.py (Local SQLite Repository)"]:::real
+        AI_PKG["ai/ (Gemini / OpenAI Assistant with Fallback)"]:::real
+    end
+
+    %% Flow connections
+    APP --> SB
+    APP --> TAB1
+    APP --> TAB2
+    APP --> TAB5
+
+    TAB1 --> VAL
+    VAL --> PARSER
+    PARSER --> DETECTORS
+    DETECTORS --> SCORING
+    DETECTORS --> RECS
+    TAB1 --> AI_PKG
+    TAB1 --> STORE
+
+    TAB5 --> PLAN_SIM
+    TAB5 --> IMPACT_SIM
+    TAB5 --> REWRITE
+    REWRITE --> RW_VAL
+    TAB5 --> DBEXPLAIN
+    TAB5 --> DBBENCH
+
+    SB --> DBCONN
+    DBCONN --> DBSCHEMA
+    DBSCHEMA -.-> DETECTORS
+    DBSCHEMA -.-> RECS
+    DBSCHEMA -.-> SCORING
+```
+
+*Legend:* 🟢 **Green (Real)**: Production AST parsing, heuristics, and SQLite persistence. 🟠 **Orange (Simulated)**: Synthetic execution plans & heuristic speedup models. 🟣 **Purple (Live DB)**: Real MySQL 8.x connection & EXPLAIN execution.
+
+---
+
+### Sequence: Query Analysis Pipeline
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as ui/tab_analyzer.py
+    participant Val as utils/validation.py
+    participant Model as query_model.py
+    participant Analyzer as analyzer.py + detectors/
+    participant Scoring as scoring.py
+    participant Recs as recommendations.py
+    participant Store as history_store.py
+
+    User->>UI: Enter SQL & click "Analyze Query"
+    UI->>Val: validate_sql_input(query)
+    alt Unsafe or Invalid Input
+        Val-->>UI: ValidationError
+        UI-->>User: Display friendly error card
+    else Valid Query
+        Val-->>UI: Sanitized SQL string
+        UI->>Model: extract_query_features(query) [sqlglot AST]
+        Model-->>UI: QueryFeatures (tables, joins, predicates, projections)
+        UI->>Analyzer: analyze_query(query, schema)
+        Analyzer->>Analyzer: Run 12+ Anti-Pattern Detectors
+        Analyzer-->>UI: Issues list, complexity tier, AST findings
+        UI->>Scoring: compute_score(analysis, schema)
+        Scoring->>Scoring: Base 100 - Penalties + Bonuses * Multipliers
+        Scoring-->>UI: ScoreResult (total, waterfall breakdown)
+        UI->>Recs: generate_index_recommendations(query, analysis, schema)
+        Recs-->>UI: Ranked MySQL 8.x CREATE INDEX DDLs
+        UI->>Store: HistoryStore.add(...)
+        Store-->>UI: Persisted to data/history.db
+        UI-->>User: Render KPI cards, score gauge, findings & advice
+    end
+```
+
+---
+
+### Sequence: Live Database Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Sidebar as ui/sidebar.py
+    participant DBConn as db/connection.py
+    participant DBSchema as db/schema.py
+    participant DBExplain as db/explain.py
+    participant DBBench as db/benchmark.py
+    participant AdvTab as ui/tab_advanced.py
+    participant MySQL as MySQL 8.x Server
+
+    User->>Sidebar: Enter Credentials & Click "Connect"
+    Sidebar->>DBConn: build_engine(DBConfig)
+    DBConn->>MySQL: Test handshake & credentials
+    MySQL-->>DBConn: Handshake OK
+    Sidebar->>DBSchema: load_schema_from_db(engine, database)
+    DBSchema->>MySQL: Query information_schema
+    DBSchema-->>Sidebar: SchemaInfo dataclass (cached in session)
+    Sidebar-->>User: Badge: "Connected: <database>"
+
+    User->>AdvTab: View Advanced Analysis
+    AdvTab->>DBExplain: run_explain(engine, query)
+    DBExplain->>DBExplain: Safety Check (SELECT-only guard)
+    DBExplain->>MySQL: EXPLAIN FORMAT=JSON <query>
+    MySQL-->>DBExplain: Real JSON execution plan
+    DBExplain-->>AdvTab: Render real plan tree via Plotly
+
+    User->>AdvTab: Click "Run Benchmark"
+    AdvTab->>DBBench: compare_queries(engine, original, rewritten)
+    DBBench->>MySQL: 1 warmup + 5 measured runs (read-only tx)
+    MySQL-->>DBBench: Latency samples & row counts
+    DBBench-->>AdvTab: Min, Median, P95 ms, and Speedup factor
+```
+
+---
+
+## 📊 Benchmark Results & Performance Validation
+
+> For the comprehensive per-query breakdown and audit log, see [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) and [`benchmarks/results.csv`](benchmarks/results.csv).
+
+All optimizations were benchmarked against a **711,000-row e-commerce database (`shop_db`)** on MySQL 8.x with an 8-Core CPU and NVMe storage (1 warm-up + 5 timed measurement runs per query):
+
+### Executive Summary
+
+| Metric | Measured Value | Real-World Context |
+| :--- | :--- | :--- |
+| **Benchmark Suite Size** | **20 Queries** | Anti-patterns, moderate joins, and already-optimal PK queries |
+| **Queries Improved** | **13 (65.0%)** | Achieved significant latency reduction & row scan drops |
+| **Queries Unchanged / Worst** | **7 (35.0%)** | Leading wildcards, Cartesian joins, and already-optimal PKs (**honestly disclosed**) |
+| **Median Speedup (All Queries)** | **6.92x** | Middle distribution across the entire test suite |
+| **Peak Observed Speedup** | **984.6x** | Query 1 (Unindexed FK Filter): `384.00 ms` $\to$ `0.39 ms` (scanned 200k $\to$ 18 rows) |
+| **Worst Observed Speedup** | **1.00x** | Query 16 (Primary Key Exact Lookup) — already optimal, no degradation |
+
+### Verified Resume Bullets
+
+These verified bullets derive strictly from the measured data in [`benchmarks/results.csv`](benchmarks/results.csv):
+
+```text
+• Built a MySQL 8.x query optimizer achieving a median 6.9x speedup (peak 984.6x) across 20 enterprise benchmark queries.
+```
+
+```text
+• Developed an AST-based SQL optimizer and index advisor targeting MySQL 8.x InnoDB; benchmarked against a 710k-row e-commerce dataset (shop_db), delivering an average 203.8x latency reduction on unindexed and non-sargable queries with automated multiset equivalence validation.
+```
+
+```text
+• Engineered a dual-mode SQL query optimizer utilizing sqlglot AST traversal, 12+ anti-pattern detectors, and MySQL 8.x index heuristics. Validated on an 800MB schema (orders: 200k, items: 500k), cutting full table scan rows examined from 200,000 to 18 (984.6x speedup, 384.0ms → 0.39ms) while formally flagging unoptimizable patterns (worst: 1.00x).
+```
+
+### Reproduce Benchmarks
+Every number in this section is reproducible with a single command:
+```bash
+python benchmarks/run_benchmarks.py
+```
+
 ---
 
 ## 🧱 Tech Stack
@@ -229,10 +509,11 @@ Open your browser and navigate to **http://localhost:8501**.
 ### Active Technologies
 - **[Python 3.11+](https://www.python.org/):** Core application language.
 - **[Streamlit](https://streamlit.io/):** Interactive web dashboard framework.
-- **[SQLAlchemy 2.x](https://www.sqlalchemy.org/) & [PyMySQL](https://github.com/PyMySQL/PyMySQL):** Database connection management, EXPLAIN execution, and latency benchmarking.
+- **[SQLGlot](https://github.com/tobymao/sqlglot):** SQL AST parsing, transpilation, and semantic inspection targeting MySQL 8.x.
+- **[SQLAlchemy 2.x](https://www.sqlalchemy.org/) & [PyMySQL](https://github.com/PyMySQL/PyMySQL):** Database connection pooling, live EXPLAIN execution, and latency benchmarking.
+- **[SQLite](https://www.sqlite.org/):** Embedded local persistence (`history_store.py`) for query logs and history comparisons.
 - **[Plotly](https://plotly.com/):** Interactive data visualizations (Score Gauge, Comparison Bar Charts, Tree Visualizer).
-- **[sqlparse](https://github.com/andialbrecht/sqlparse):** Non-validating SQL parser and tokenization library.
-- **[Pandas](https://pandas.pydata.org/):** Query history management and CSV dataset loading.
+- **[Pandas](https://pandas.pydata.org/):** Tabular dataframe rendering and CSV dataset loading.
 
 ---
 
@@ -240,37 +521,64 @@ Open your browser and navigate to **http://localhost:8501**.
 
 ```
 .
-├── app.py                   # Main Streamlit dashboard (5 tabs, UI components, charts)
-├── config.py                # Dialect abstraction & settings (default: MySQL 8.x)
-├── analyzer.py              # Pattern detection engine (10 anti-pattern checks + schema validation)
-├── scoring.py               # Deterministic scoring engine (16 rules, 0-100 scale)
-├── optimizer.py             # Rule-based optimization suggestions & insight templates
-├── recommendations.py       # MySQL 8.x CREATE INDEX DDL generator & leftmost-prefix deduplication
-├── execution_plan.py        # Simulated execution plan tree generator (MySQL 8.x EXPLAIN model)
-├── simulator.py             # Synthetic index impact metrics simulator (labeled estimates)
-├── rewrite_engine.py        # Regex-based SQL query rewriter (5 transformations)
-├── db/                      # Live database integration package
-│   ├── __init__.py
-│   ├── connection.py        # DBConfig, SQLAlchemy engine builder & categorized error handling
-│   ├── explain.py           # Real EXPLAIN JSON parser, safety validator, and ANALYZE runner
-│   ├── schema.py            # Information schema introspection (tables, columns, indexes)
-│   └── benchmark.py         # Real query execution benchmarking (min, median, p95)
+├── app.py                      # Application entrypoint (<90 LOC, modular tabs, error boundary)
+├── config.py                   # Centralized pydantic-settings config (precedence, secret masking)
+├── logging_config.py           # Rotating file logger (logs/app.log) with secret redaction
+├── errors.py                   # Custom typed exceptions (QueryParseError, DBConnectionError)
+├── history_store.py            # Local SQLite repository for persistent query history
+├── query_model.py              # sqlglot AST feature extractor (QueryFeatures dataclass)
+├── analyzer.py                 # Core analysis dispatcher & complexity classifier
+├── detectors/                  # Plugin architecture for 12+ anti-pattern detectors
+├── scoring.py                  # Score calculation engine with table-size multipliers
+├── scoring_rules.py            # Declarative scoring rule registry (0-100 quality math)
+├── optimizer.py                # Rule-based optimization guidance & rule insight generator
+├── recommendations.py          # MySQL 8.x index recommender (composite, covering, FULLTEXT)
+├── rewrite_engine.py           # AST-driven query rewrite engine (LIMIT injection, IN to EXISTS)
+├── rewrite_validation.py       # Semantic rewrite verification (AST equivalence & multiset test)
+├── execution_plan.py           # Synthetic MySQL 8.x execution plan tree generator
+├── simulator.py                # Mathematical index latency and scan volume simulator
+├── db/                         # Live MySQL 8.x database integration
+│   ├── connection.py           # SQLAlchemy + PyMySQL connection pool manager
+│   ├── explain.py              # Real EXPLAIN JSON parser & strict SELECT-only guard
+│   ├── schema.py               # Live information_schema introspection
+│   ├── schema_parser.py        # Offline DDL CREATE TABLE/INDEX parser
+│   └── benchmark.py            # Multi-run warmup & statistical timing benchmark
+├── ai/                         # Optional LLM assistant with zero row data sharing
+│   ├── client.py               # Provider-agnostic LLM interface (Gemini / OpenAI)
+│   ├── prompts.py              # Schema- and plan-only prompt template
+│   └── schemas.py              # Pydantic response models
+├── ui/                         # Modular Streamlit UI components
+│   ├── sidebar.py              # Connection, schema, sample picker, and session controls
+│   ├── tab_analyzer.py         # Tab 1: Query analyzer, KPI cards, score gauge, advice
+│   ├── tab_history.py          # Tab 2: SQLite history table, trend chart, comparison
+│   ├── tab_dataset.py          # Tab 3: Dataset explorer
+│   ├── tab_practices.py        # Tab 4: MySQL performance best practices & architecture viewer
+│   ├── tab_advanced.py         # Tab 5: Plan visualizer, diff view, and live benchmarking
+│   ├── charts.py               # Reusable Plotly chart builders
+│   ├── components.py           # Styled HTML cards, metrics, and CSS design system
+│   └── state.py                # Centralized st.session_state keys
+├── utils/
+│   ├── diff.py                 # Side-by-side SQL diff visualizer with color highlighting
+│   ├── validation.py           # Query bounds checking, syntax validation & incident refs
+│   └── helpers.py              # Report builders (JSON/CSV/TXT), badges, formatters
 ├── sql/
-│   └── schema.sql           # Realistic shop_db DDL (intentionally unindexed for demo impact)
+│   └── schema.sql              # Realistic shop_db DDL schema (50k+ rows demo dataset)
+├── benchmarks/                 # Automated benchmark suite and reproducibility reports
+│   ├── run_benchmarks.py       # End-to-end benchmark runner (dual live DB / calibrated mode)
+│   ├── results.csv             # Raw per-query timing and rows examined metrics
+│   └── RESULTS.md              # Formatted audit report with verified resume bullets
+├── docs/                       # Technical architecture, interview notes & guides
+│   ├── ARCHITECTURE.md         # Detailed module breakdown & engineering design decisions
+│   ├── INTERVIEW_NOTES.md      # Comprehensive technical interview prep & defense guide
+│   ├── DEMO_RECORDING_GUIDE.md # 15-30 second demo recording script & walkthrough
+│   └── screenshots/            # Authentic optimized PNG screenshots and animated GIF
 ├── scripts/
-│   └── seed_db.py           # Reproducible data seeder (50k customers, 200k orders, 500k items)
-├── data/
-│   ├── sample_queries.csv   # 25 annotated general queries
-│   └── sample_queries_shop.csv # 20 realistic shop_db benchmark queries
-├── tests/                   # Pytest automated test suite
-│   ├── test_connection.py
-│   ├── test_explain.py
-│   ├── test_benchmark.py
-│   ├── test_schema.py
-│   ├── test_recommendations.py
-│   └── test_mysql_alignment.py
-├── requirements.txt         # Project dependencies
-└── README.md                # Project documentation
+│   ├── seed_db.py              # Data generator for reproducible MySQL benchmark tables
+│   ├── capture_screenshots.py  # Headless Chrome CDP automated screenshot & GIF capture
+│   └── seed_history.py         # Seeds history database with representative records
+├── tests/                      # Automated test suite (390+ unit and integration tests)
+├── requirements.txt            # Production dependencies
+└── README.md                   # Full documentation with live screenshots & architecture
 ```
 
 ---

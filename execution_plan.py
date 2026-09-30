@@ -25,9 +25,11 @@ logger = logging.getLogger(__name__)
 # Plan node definition (MySQL EXPLAIN representation)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PlanNode:
     """Represents a node in a simulated MySQL 8.x query execution plan."""
+
     node_type: str
     description: str
     estimated_rows: int
@@ -54,21 +56,22 @@ class PlanNode:
 # MySQL 8.x Cost Model Constants (Estimated Heuristics)
 # Based on default values in mysql.server_cost and mysql.engine_cost
 # ---------------------------------------------------------------------------
-_ROWS_BASE = 100_000                  # Baseline table cardinality assumption
-_PAGE_SIZE = 16_384                   # Default InnoDB page size (16 KB)
-_AVG_ROW_WIDTH = 100                  # Estimated average row width in bytes
+_ROWS_BASE = 100_000  # Baseline table cardinality assumption
+_PAGE_SIZE = 16_384  # Default InnoDB page size (16 KB)
+_AVG_ROW_WIDTH = 100  # Estimated average row width in bytes
 _ROWS_PER_PAGE = max(1, _PAGE_SIZE // _AVG_ROW_WIDTH)  # ~163 rows per page
 
 # Engine and server cost factors (MySQL 8.0 defaults)
-_ROW_EVALUATE_COST = 0.10             # CPU cost to evaluate a record
-_MEMORY_BLOCK_READ_COST = 0.25        # Cost to read a 16KB page from buffer pool
-_IO_BLOCK_READ_COST = 1.00            # Cost to read a 16KB page from disk
-_KEY_COMPARE_COST = 0.05              # Cost to compare index keys during B-tree traversal
+_ROW_EVALUATE_COST = 0.10  # CPU cost to evaluate a record
+_MEMORY_BLOCK_READ_COST = 0.25  # Cost to read a 16KB page from buffer pool
+_IO_BLOCK_READ_COST = 1.00  # Cost to read a 16KB page from disk
+_KEY_COMPARE_COST = 0.05  # Cost to compare index keys during B-tree traversal
 
 
 # ---------------------------------------------------------------------------
 # Node constructors (MySQL EXPLAIN vocabulary)
 # ---------------------------------------------------------------------------
+
 
 def _table_scan_node(table: str, selectivity: float = 1.0, has_where: bool = False) -> PlanNode:
     """
@@ -107,7 +110,11 @@ def _index_lookup_node(table: str, column: str, selectivity: float = 0.01) -> Pl
     key_name = f"idx_{table}_{column}"
     pages = max(1, math.ceil(rows_out / _ROWS_PER_PAGE))
     # 3 key comparisons (root, intermediate, leaf) + buffer pool page reads + row evaluations
-    total_cost = (3 * _KEY_COMPARE_COST) + (pages * _MEMORY_BLOCK_READ_COST) + (rows_out * _ROW_EVALUATE_COST)
+    total_cost = (
+        (3 * _KEY_COMPARE_COST)
+        + (pages * _MEMORY_BLOCK_READ_COST)
+        + (rows_out * _ROW_EVALUATE_COST)
+    )
 
     return PlanNode(
         node_type="ref",
@@ -334,10 +341,12 @@ def _subquery_node(child: PlanNode, alias: str) -> PlanNode:
 # Extraction helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_tables(query: str) -> list[str]:
     hits = re.findall(
         r"\b(?:FROM|JOIN)\s+([\w]+)(?:\s+(?:AS\s+)?[\w]+)?",
-        query, re.IGNORECASE,
+        query,
+        re.IGNORECASE,
     )
     return [h.lower() for h in hits]
 
@@ -347,16 +356,15 @@ def _extract_on_conditions(query: str) -> list[str]:
 
 
 def _extract_order_keys(query: str) -> str:
-    m = re.search(
-        r"\bORDER\s+BY\b\s+(.+?)(?:\bLIMIT\b|$)", query, re.IGNORECASE | re.DOTALL
-    )
+    m = re.search(r"\bORDER\s+BY\b\s+(.+?)(?:\bLIMIT\b|$)", query, re.IGNORECASE | re.DOTALL)
     return m.group(1).strip() if m else "key"
 
 
 def _extract_group_keys(query: str) -> str:
     m = re.search(
         r"\bGROUP\s+BY\b\s+(.+?)(?:\bHAVING\b|\bORDER\b|\bLIMIT\b|$)",
-        query, re.IGNORECASE | re.DOTALL,
+        query,
+        re.IGNORECASE | re.DOTALL,
     )
     return m.group(1).strip() if m else ""
 
@@ -369,7 +377,8 @@ def _extract_limit_val(query: str) -> int:
 def _where_preview(query: str) -> str:
     m = re.search(
         r"\bWHERE\b\s+(.{1,50}?)(?:\bGROUP\b|\bORDER\b|\bLIMIT\b|$)",
-        query, re.IGNORECASE | re.DOTALL,
+        query,
+        re.IGNORECASE | re.DOTALL,
     )
     return m.group(1).strip().replace("\n", " ") if m else "condition"
 
@@ -378,21 +387,22 @@ def _where_preview(query: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def generate_execution_plan(query: str, analysis: dict) -> PlanNode:
     """
     Build a simulated MySQL 8.x execution plan tree.
     Returns the root PlanNode (top of the plan = final stage of query processing).
     """
-    tables      = _extract_tables(query)
-    join_cnt    = analysis.get("join_count", 0)
-    has_where   = analysis.get("has_where", False)
-    has_idx     = bool(analysis.get("filter_columns"))
+    tables = _extract_tables(query)
+    join_cnt = analysis.get("join_count", 0)
+    has_where = analysis.get("has_where", False)
+    has_idx = bool(analysis.get("filter_columns"))
     filter_cols = analysis.get("filter_columns", [])
-    has_agg     = analysis.get("has_aggregation", False)
-    has_grp     = analysis.get("has_group_by", False)
-    has_ord     = analysis.get("has_order_by", False)
-    has_lim     = analysis.get("has_limit", False)
-    sub_cnt     = analysis.get("subquery_count", 0)
+    has_agg = analysis.get("has_aggregation", False)
+    has_grp = analysis.get("has_group_by", False)
+    has_ord = analysis.get("has_order_by", False)
+    has_lim = analysis.get("has_limit", False)
+    sub_cnt = analysis.get("subquery_count", 0)
 
     primary = tables[0] if tables else "table"
 
@@ -418,16 +428,16 @@ def generate_execution_plan(query: str, analysis: dict) -> PlanNode:
     on_conds = _extract_on_conditions(query)
     join_tables = tables[1:] if len(tables) > 1 else []
     for i in range(join_cnt):
-        jt   = join_tables[i] if i < len(join_tables) else f"t{i+2}"
+        jt = join_tables[i] if i < len(join_tables) else f"t{i + 2}"
         cond = on_conds[i] if i < len(on_conds) else f"{primary}.id = {jt}.{primary}_id"
         if has_idx and i == 0:
             # Indexed join: MySQL uses Index Nested Loop
             right = _index_lookup_node(jt, "id", selectivity=0.001)
-            scan  = _nested_loop_node(scan, right, cond)
+            scan = _nested_loop_node(scan, right, cond)
         else:
             # Unindexed join: MySQL 8.0.18+ uses Hash Join
             right = _table_scan_node(jt, selectivity=1.0, has_where=False)
-            scan  = _hash_join_node(scan, right, cond)
+            scan = _hash_join_node(scan, right, cond)
 
     # ---- 4. Aggregate / GROUP BY ----
     if has_grp:
@@ -456,16 +466,18 @@ def flatten_plan(root: PlanNode) -> list[dict]:
 
     def _walk(node: PlanNode, depth: int) -> None:
         indent = "\u00a0\u00a0\u00a0\u00a0" * depth
-        result.append({
-            "Plan Node":    indent + node.icon + " " + node.node_type,
-            "Table":        node.table or "—",
-            "Access Type":  node.access_type or node.node_type,
-            "Key":          node.key_used or "—",
-            "Est. Rows":    f"{node.estimated_rows:,}",
-            "Filtered %":   f"{node.filtered_pct:.1f}%",
-            "Extra":        ", ".join(node.extra) if node.extra else "—",
-            "Est. Cost":    f"{node.total_cost:.2f}",
-        })
+        result.append(
+            {
+                "Plan Node": indent + node.icon + " " + node.node_type,
+                "Table": node.table or "—",
+                "Access Type": node.access_type or node.node_type,
+                "Key": node.key_used or "—",
+                "Est. Rows": f"{node.estimated_rows:,}",
+                "Filtered %": f"{node.filtered_pct:.1f}%",
+                "Extra": ", ".join(node.extra) if node.extra else "—",
+                "Est. Cost": f"{node.total_cost:.2f}",
+            }
+        )
         for child in node.children:
             _walk(child, depth + 1)
 
@@ -505,23 +517,25 @@ def plan_summary(root: PlanNode) -> dict:
     node_types = [n.node_type for n in nodes]
     access_types = [n.access_type for n in nodes if n.access_type]
 
-    has_index = any(t in ("ref", "range", "eq_ref", "const", "index", "Index Scan")
-                    for t in (node_types + access_types))
+    has_index = any(
+        t in ("ref", "range", "eq_ref", "const", "index", "Index Scan")
+        for t in (node_types + access_types)
+    )
     has_all = any(t in ("ALL", "Seq Scan") for t in (node_types + access_types))
 
     return {
-        "total_nodes":    len(nodes),
-        "plan_root":      root.node_type,
-        "access_type":    root.access_type or root.node_type,
-        "has_seq_scan":   has_all,   # preserved for backward compatibility
-        "has_all_scan":   has_all,   # MySQL terminology
+        "total_nodes": len(nodes),
+        "plan_root": root.node_type,
+        "access_type": root.access_type or root.node_type,
+        "has_seq_scan": has_all,  # preserved for backward compatibility
+        "has_all_scan": has_all,  # MySQL terminology
         "has_index_scan": has_index,
-        "has_hash_join":  "Hash Join" in node_types,
-        "has_nested_loop":"Nested Loop" in node_types,
-        "has_sort":       any(t in ("filesort", "Sort") for t in node_types),
-        "has_aggregate":  any(t in ("temporary", "Aggregate", "HashAggregate") for t in node_types),
-        "plan_cost":      root.total_cost,
-        "cost_category":  plan_cost_category(root),
+        "has_hash_join": "Hash Join" in node_types,
+        "has_nested_loop": "Nested Loop" in node_types,
+        "has_sort": any(t in ("filesort", "Sort") for t in node_types),
+        "has_aggregate": any(t in ("temporary", "Aggregate", "HashAggregate") for t in node_types),
+        "plan_cost": root.total_cost,
+        "cost_category": plan_cost_category(root),
         "estimated_rows": root.estimated_rows,
-        "key_used":       root.key_used,
+        "key_used": root.key_used,
     }

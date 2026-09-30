@@ -11,13 +11,11 @@ Edge cases and adversarial input tests:
 
 from __future__ import annotations
 
-import pytest
-
 from analyzer import analyze_query
-from optimizer import generate_optimizations, generate_rule_insight
+from optimizer import generate_rule_insight
 from recommendations import generate_index_recommendations
 from rewrite_engine import rewrite_query
-from scoring import compute_score, simulate_optimized_score
+from scoring import compute_score
 
 
 def test_empty_string():
@@ -104,5 +102,7 @@ def test_sql_injection_style_input():
     score = compute_score(analysis)
     assert 0 <= score.total <= 100
     # Must flag anti-patterns such as SELECT * or UNION without ALL
-    issue_codes = {i["code"] for i in analysis["issues"]} | {w["code"] for w in analysis["warnings"]}
+    issue_codes = {i["code"] for i in analysis["issues"]} | {
+        w["code"] for w in analysis["warnings"]
+    }
     assert "SELECT_STAR" in issue_codes or "UNION_INSTEAD_OF_UNION_ALL" in issue_codes

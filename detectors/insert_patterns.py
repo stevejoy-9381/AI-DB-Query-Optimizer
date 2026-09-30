@@ -28,26 +28,28 @@ class InsertSingleRowDetector(BaseDetector):
         findings = []
         if features.statement_type == "INSERT" and features.insert_row_count == 1:
             table_name = features.tables[0] if features.tables else "target_table"
-            findings.append(Finding(
-                code=self.code,
-                severity=self.severity,
-                score_delta=self.score_delta,
-                message=(
-                    f"Single-row INSERT into `{table_name}`. If executed in an application loop, each statement "
-                    "incurs round-trip network latency and individual transaction redo-log flushes. "
-                    "Batch multiple records into a multi-row INSERT."
-                ),
-                fix_example=(
-                    f"-- Before (Executed N times in a loop)\n"
-                    f"INSERT INTO {table_name} (col1, col2) VALUES ('a', 1);\n\n"
-                    f"-- After (Batch 500-1000 rows per transaction)\n"
-                    f"INSERT INTO {table_name} (col1, col2) VALUES\n"
-                    f"  ('a', 1),\n"
-                    f"  ('b', 2),\n"
-                    f"  ('c', 3);"
-                ),
-                category="throughput",
-            ))
+            findings.append(
+                Finding(
+                    code=self.code,
+                    severity=self.severity,
+                    score_delta=self.score_delta,
+                    message=(
+                        f"Single-row INSERT into `{table_name}`. If executed in an application loop, each statement "
+                        "incurs round-trip network latency and individual transaction redo-log flushes. "
+                        "Batch multiple records into a multi-row INSERT."
+                    ),
+                    fix_example=(
+                        f"-- Before (Executed N times in a loop)\n"
+                        f"INSERT INTO {table_name} (col1, col2) VALUES ('a', 1);\n\n"
+                        f"-- After (Batch 500-1000 rows per transaction)\n"
+                        f"INSERT INTO {table_name} (col1, col2) VALUES\n"
+                        f"  ('a', 1),\n"
+                        f"  ('b', 2),\n"
+                        f"  ('c', 3);"
+                    ),
+                    category="throughput",
+                )
+            )
         return findings
 
 
@@ -67,21 +69,23 @@ class InsertSelectUnboundedDetector(BaseDetector):
         if features.is_insert_select or features.statement_type == "INSERT...SELECT":
             if not features.has_where and features.limit is None:
                 dest_table = features.tables[0] if features.tables else "destination"
-                findings.append(Finding(
-                    code=self.code,
-                    severity=self.severity,
-                    score_delta=self.score_delta,
-                    message=(
-                        f"INSERT...SELECT into `{dest_table}` has no WHERE filter or LIMIT clause. "
-                        "This copies the entire source table in a single atomic transaction, holding shared read locks "
-                        "on the source and blowing up the InnoDB undo log and transaction buffer."
-                    ),
-                    fix_example=(
-                        f"-- Before (Full table copy)\n"
-                        f"INSERT INTO {dest_table} SELECT * FROM source_table;\n\n"
-                        f"-- After (Chunked migration with filter)\n"
-                        f"INSERT INTO {dest_table} SELECT * FROM source_table WHERE created_at < '2024-01-01' LIMIT 5000;"
-                    ),
-                    category="performance",
-                ))
+                findings.append(
+                    Finding(
+                        code=self.code,
+                        severity=self.severity,
+                        score_delta=self.score_delta,
+                        message=(
+                            f"INSERT...SELECT into `{dest_table}` has no WHERE filter or LIMIT clause. "
+                            "This copies the entire source table in a single atomic transaction, holding shared read locks "
+                            "on the source and blowing up the InnoDB undo log and transaction buffer."
+                        ),
+                        fix_example=(
+                            f"-- Before (Full table copy)\n"
+                            f"INSERT INTO {dest_table} SELECT * FROM source_table;\n\n"
+                            f"-- After (Chunked migration with filter)\n"
+                            f"INSERT INTO {dest_table} SELECT * FROM source_table WHERE created_at < '2024-01-01' LIMIT 5000;"
+                        ),
+                        category="performance",
+                    )
+                )
         return findings

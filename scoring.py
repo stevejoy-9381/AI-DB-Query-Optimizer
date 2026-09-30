@@ -14,9 +14,7 @@ from typing import Any, Optional
 
 from scoring_rules import (
     SCORE_RULES_CATALOG,
-    SCORE_RULES_DICT,
     STATEMENT_SCORE_RULES,
-    ScoreRuleConfig,
     get_table_size_multiplier,
 )
 
@@ -33,9 +31,9 @@ SCORE_RULES: list[dict] = [
 ]
 
 COST_THRESHOLDS = {
-    "LOW":    (80, 100),
+    "LOW": (80, 100),
     "MEDIUM": (50, 79),
-    "HIGH":   (0,  49),
+    "HIGH": (0, 49),
 }
 
 
@@ -63,7 +61,7 @@ def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
     -------
     ScoreBreakdown
     """
-    issue_codes   = {i["code"] for i in analysis.get("issues",   [])}
+    issue_codes = {i["code"] for i in analysis.get("issues", [])}
     warning_codes = {w["code"] for w in analysis.get("warnings", [])}
     all_codes = issue_codes | warning_codes
     stmt_type = analysis.get("statement_type") or analysis.get("query_type", "SELECT")
@@ -96,7 +94,9 @@ def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
             # Check if any filter column has a covering/prefix index
             filter_cols = [c.lower() for c in analysis.get("filter_columns", [])]
             for t_info in matched_tables:
-                indexes_iterable = t_info.indexes.values() if isinstance(t_info.indexes, dict) else t_info.indexes
+                indexes_iterable = (
+                    t_info.indexes.values() if isinstance(t_info.indexes, dict) else t_info.indexes
+                )
                 for idx in indexes_iterable:
                     if idx.columns and idx.columns[0].lower() in filter_cols:
                         has_indexed_filter = True
@@ -128,7 +128,7 @@ def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
     applied: list[dict] = []
 
     for rule in rule_configs:
-        code  = rule.code
+        code = rule.code
         base_delta = rule.delta
         label = rule.label
         explanation = rule.explanation
@@ -147,13 +147,15 @@ def compute_score(analysis: dict, schema: Any | None = None) -> ScoreBreakdown:
                 final_delta = base_delta
 
             unclipped_score += final_delta
-            applied.append({
-                "code": code,
-                "label": label,
-                "delta": final_delta,
-                "severity": rule.severity,
-                "reason": explanation,
-            })
+            applied.append(
+                {
+                    "code": code,
+                    "label": label,
+                    "delta": final_delta,
+                    "severity": rule.severity,
+                    "reason": explanation,
+                }
+            )
 
     score = max(0, min(100, unclipped_score))
 
@@ -202,13 +204,22 @@ def simulate_optimized_score(analysis: dict) -> int:
 
     # Assume optimization fixes SELECT *, adds WHERE, removes subqueries, adds LIMIT
     optimized_issues = [
-        i for i in analysis.get("issues", [])
-        if i["code"] not in ("SELECT_STAR", "MISSING_WHERE", "MISSING_LIMIT",
-                             "SUBQUERY_DETECTED", "UPDATE_WITHOUT_WHERE",
-                             "DELETE_WITHOUT_WHERE", "ORDER_BY_RAND")
+        i
+        for i in analysis.get("issues", [])
+        if i["code"]
+        not in (
+            "SELECT_STAR",
+            "MISSING_WHERE",
+            "MISSING_LIMIT",
+            "SUBQUERY_DETECTED",
+            "UPDATE_WITHOUT_WHERE",
+            "DELETE_WITHOUT_WHERE",
+            "ORDER_BY_RAND",
+        )
     ]
     optimized_warnings = [
-        w for w in analysis.get("warnings", [])
+        w
+        for w in analysis.get("warnings", [])
         if w["code"] not in ("LEADING_WILDCARD", "FUNCTION_ON_COLUMN", "UNION_INSTEAD_OF_UNION_ALL")
     ]
     optimized_analysis["issues"] = optimized_issues

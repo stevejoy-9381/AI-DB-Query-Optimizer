@@ -1,21 +1,21 @@
 category,name,query,description
-Anti-pattern,Unindexed Foreign Key Filter,SELECT * FROM orders WHERE customer_id = 42,Performs a full table scan on 200k orders because customer_id secondary index is omitted.
-Anti-pattern,Non-Sargable Year Function,SELECT * FROM orders WHERE YEAR(order_date) = 2024,Applying YEAR() function wraps column and defeats B-tree index seeks.
-Anti-pattern,Leading Wildcard Customer Search,SELECT * FROM customers WHERE email LIKE '%@gmail.com',Leading wildcard forces full table scan across all customer rows.
-Anti-pattern,Unindexed Multi-Table Join,SELECT c.name, o.id, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id WHERE o.status = 'PENDING',Orders table lacks index on status and customer_id resulting in expensive join scans.
-Anti-pattern,Cartesian Join Products Orders,SELECT * FROM products JOIN orders WHERE products.category = 'Electronics' LIMIT 100,Missing explicit ON condition causes Cartesian product evaluation.
-Anti-pattern,Aggregating 500k Rows Without Filter,SELECT product_id, SUM(quantity) FROM order_items GROUP BY product_id,Full scan over all 500k order items without WHERE filtering.
-Anti-pattern,SELECT * With Large Range,SELECT * FROM orders WHERE total_amount BETWEEN 50.00 AND 500.00,Wide range query using SELECT * causing massive I/O read volume.
-Anti-pattern,Correlated Subquery in WHERE,SELECT * FROM customers c WHERE (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) > 10,Executes subquery for every customer row without indexed lookups.
-Anti-pattern,Order By Without Limit,SELECT id, customer_id, total_amount FROM orders WHERE status = 'COMPLETED' ORDER BY order_date DESC,Filesort across all completed orders without LIMIT clause.
-Anti-pattern,Distinct Over Unindexed Join,SELECT DISTINCT c.city FROM customers c JOIN orders o ON c.id = o.customer_id WHERE o.shipping_state = 'CA',DISTINCT combined with join creates temporary table deduplication overhead.
-Moderate,Indexed Primary Key Join With Filter,SELECT c.id, c.name, o.id AS order_id, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.id = 150,Fast primary key lookup on customers but scans orders for customer_id.
-Moderate,Status Filter With Limit,SELECT id, customer_id, total_amount FROM orders WHERE status = 'PROCESSING' LIMIT 25,Simple unindexed filter mitigated by early termination via LIMIT.
-Moderate,Order Date Range Projection,SELECT id, customer_id, order_date, total_amount FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2024-02-01',Clean sargable date range but requires table scan without secondary index.
-Moderate,Specific Column Projection Join,SELECT c.name, c.email, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.id BETWEEN 100 AND 200,Specific column list reduces memory bandwidth on join.
-Moderate,City Filter With Grouping,SELECT shipping_city, COUNT(*) AS order_count FROM orders WHERE shipping_state = 'TX' GROUP BY shipping_city,Aggregate grouped by city with state filter.
-Good,Primary Key Exact Lookup,SELECT id, name, email FROM customers WHERE id = 1050,Instant single-row const seek via InnoDB clustered primary key index.
-Good,Covering Projection via Primary Key,SELECT id, name FROM customers WHERE id IN (10, 20, 30, 40, 50),Direct primary key range scan retrieving only needed projected columns.
-Good,Indexed Order Item by PK,SELECT id, order_id, product_id, quantity, unit_price FROM order_items WHERE id = 45000,Point lookup on clustered index.
-Good,Sargable Order Range With Limit,SELECT id, customer_id, total_amount, order_date FROM orders WHERE id > 190000 AND order_date >= '2024-06-01' LIMIT 50,Bounded ID range scan with LIMIT.
-Good,Aggregated Order Total for Single Customer,SELECT customer_id, COUNT(*) AS order_count, SUM(total_amount) AS spent FROM orders WHERE customer_id = 120 GROUP BY customer_id,Grouped aggregate targeting single customer record.
+Anti-pattern,Unindexed Foreign Key Filter,"SELECT * FROM orders WHERE customer_id = 42","Performs a full table scan on 200k orders because customer_id secondary index is omitted."
+Anti-pattern,Non-Sargable Year Function,"SELECT * FROM orders WHERE YEAR(order_date) = 2024","Applying YEAR() function wraps column and defeats B-tree index seeks."
+Anti-pattern,Leading Wildcard Customer Search,"SELECT * FROM customers WHERE email LIKE '%@gmail.com'","Leading wildcard forces full table scan across all customer rows."
+Anti-pattern,Unindexed Multi-Table Join,"SELECT c.name, o.id, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id WHERE o.status = 'PENDING'","Orders table lacks index on status and customer_id resulting in expensive join scans."
+Anti-pattern,Cartesian Join Products Orders,"SELECT * FROM products JOIN orders WHERE products.category = 'Electronics' LIMIT 100","Missing explicit ON condition causes Cartesian product evaluation."
+Anti-pattern,Aggregating 500k Rows Without Filter,"SELECT product_id, SUM(quantity) FROM order_items GROUP BY product_id","Full scan over all 500k order items without WHERE filtering."
+Anti-pattern,SELECT * With Large Range,"SELECT * FROM orders WHERE total_amount BETWEEN 50.00 AND 500.00","Wide range query using SELECT * causing massive I/O read volume."
+Anti-pattern,Correlated Subquery in WHERE,"SELECT * FROM customers c WHERE (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) > 10","Executes subquery for every customer row without indexed lookups."
+Anti-pattern,Order By Without Limit,"SELECT id, customer_id, total_amount FROM orders WHERE status = 'COMPLETED' ORDER BY order_date DESC","Filesort across all completed orders without LIMIT clause."
+Anti-pattern,Distinct Over Unindexed Join,"SELECT DISTINCT c.city FROM customers c JOIN orders o ON c.id = o.customer_id WHERE o.shipping_state = 'CA'","DISTINCT combined with join creates temporary table deduplication overhead."
+Moderate,Indexed Primary Key Join With Filter,"SELECT c.id, c.name, o.id AS order_id, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.id = 150","Fast primary key lookup on customers but scans orders for customer_id."
+Moderate,Status Filter With Limit,"SELECT id, customer_id, total_amount FROM orders WHERE status = 'PROCESSING' LIMIT 25","Simple unindexed filter mitigated by early termination via LIMIT."
+Moderate,Order Date Range Projection,"SELECT id, customer_id, order_date, total_amount FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2024-02-01'","Clean sargable date range but requires table scan without secondary index."
+Moderate,Specific Column Projection Join,"SELECT c.name, c.email, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.id BETWEEN 100 AND 200","Specific column list reduces memory bandwidth on join."
+Moderate,City Filter With Grouping,"SELECT shipping_city, COUNT(*) AS order_count FROM orders WHERE shipping_state = 'TX' GROUP BY shipping_city","Aggregate grouped by city with state filter."
+Good,Primary Key Exact Lookup,"SELECT id, name, email FROM customers WHERE id = 1050","Instant single-row const seek via InnoDB clustered primary key index."
+Good,Covering Projection via Primary Key,"SELECT id, name FROM customers WHERE id IN (10, 20, 30, 40, 50)","Direct primary key range scan retrieving only needed projected columns."
+Good,Indexed Order Item by PK,"SELECT id, order_id, product_id, quantity, unit_price FROM order_items WHERE id = 45000","Point lookup on clustered index."
+Good,Sargable Order Range With Limit,"SELECT id, customer_id, total_amount, order_date FROM orders WHERE id > 190000 AND order_date >= '2024-06-01' LIMIT 50","Bounded ID range scan with LIMIT."
+Good,Aggregated Order Total for Single Customer,"SELECT customer_id, COUNT(*) AS order_count, SUM(total_amount) AS spent FROM orders WHERE customer_id = 120 GROUP BY customer_id","Grouped aggregate targeting single customer record."

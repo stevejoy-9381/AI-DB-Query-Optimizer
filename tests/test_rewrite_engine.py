@@ -4,19 +4,12 @@ Verifies each rule before/after transformation individually and in combination.
 """
 
 import pytest
+
+from analyzer import analyze_query
+from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
 from rewrite_engine import (
     rewrite_query,
-    InSubqueryToExistsRule,
-    NotInSubqueryToNotExistsRule,
-    DateYearFunctionToRangeRule,
-    RemoveRedundantDistinctRule,
-    UnionToUnionAllRule,
-    FunctionOnColumnRule,
-    SelectStarRewriteRule,
-    LimitInjectionRule,
 )
-from analyzer import analyze_query
-from db.schema import SchemaInfo, TableInfo, ColumnInfo, IndexInfo
 
 
 @pytest.fixture
@@ -42,6 +35,7 @@ def test_schema():
 # 1. IN Subquery to EXISTS
 # ---------------------------------------------------------------------------
 
+
 def test_rule_in_subquery_to_exists():
     q = "SELECT id FROM customers WHERE id IN (SELECT customer_id FROM orders);"
     analysis = analyze_query(q)
@@ -55,6 +49,7 @@ def test_rule_in_subquery_to_exists():
 # ---------------------------------------------------------------------------
 # 2. NOT IN Subquery to NOT EXISTS
 # ---------------------------------------------------------------------------
+
 
 def test_rule_not_in_subquery_to_not_exists():
     q = "SELECT id FROM customers WHERE id NOT IN (SELECT customer_id FROM orders);"
@@ -70,6 +65,7 @@ def test_rule_not_in_subquery_to_not_exists():
 # 3. YEAR(col) to Sargable Date Range
 # ---------------------------------------------------------------------------
 
+
 def test_rule_year_function_to_range():
     q = "SELECT id FROM orders WHERE YEAR(created_at) = 2024;"
     analysis = analyze_query(q)
@@ -83,6 +79,7 @@ def test_rule_year_function_to_range():
 # ---------------------------------------------------------------------------
 # 4. Remove Redundant DISTINCT (with Schema)
 # ---------------------------------------------------------------------------
+
 
 def test_rule_remove_redundant_distinct(test_schema):
     q = "SELECT DISTINCT id, name FROM customers;"
@@ -106,6 +103,7 @@ def test_rule_distinct_preserved_when_no_unique_key(test_schema):
 # 5. UNION to UNION ALL
 # ---------------------------------------------------------------------------
 
+
 def test_rule_union_to_union_all():
     q = "SELECT id FROM current_orders UNION SELECT id FROM past_orders;"
     analysis = analyze_query(q)
@@ -119,6 +117,7 @@ def test_rule_union_to_union_all():
 # 6. Function on Column Inversion
 # ---------------------------------------------------------------------------
 
+
 def test_rule_function_on_column():
     q = "SELECT id FROM users WHERE UPPER(status) = 'ACTIVE';"
     analysis = analyze_query(q)
@@ -131,6 +130,7 @@ def test_rule_function_on_column():
 # ---------------------------------------------------------------------------
 # 7. SELECT * Expansion (Schema vs Hints)
 # ---------------------------------------------------------------------------
+
 
 def test_rule_select_star_with_schema(test_schema):
     q = "SELECT * FROM customers WHERE id = 1;"
@@ -156,6 +156,7 @@ def test_rule_select_star_fallback_hints():
 # 8. LIMIT Injection & Opt-in Toggle
 # ---------------------------------------------------------------------------
 
+
 def test_rule_limit_injection_enabled():
     q = "SELECT id, name FROM customers;"
     analysis = analyze_query(q)
@@ -176,6 +177,7 @@ def test_rule_limit_injection_disabled():
 # ---------------------------------------------------------------------------
 # 9. Deep OFFSET Keyset Pagination Advice
 # ---------------------------------------------------------------------------
+
 
 def test_offset_pagination_advice():
     q = "SELECT id, total FROM orders ORDER BY id LIMIT 20 OFFSET 5000;"

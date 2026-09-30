@@ -26,8 +26,8 @@ def render_tab_dataset() -> None:
                 names="Category",
                 values="Count",
                 color_discrete_map={
-                    "Good":         "#2ecc71",
-                    "Moderate":     "#f39c12",
+                    "Good": "#2ecc71",
+                    "Moderate": "#f39c12",
                     "Anti-pattern": "#e74c3c",
                 },
             )

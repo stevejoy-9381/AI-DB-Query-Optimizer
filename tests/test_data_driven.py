@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import os
+
 import pytest
 
 from analyzer import analyze_query
@@ -83,4 +84,6 @@ def test_good_queries_score_higher_than_antipattern_queries(sample_schema):
 
     # Average Good score should exceed average Anti-pattern score
     assert avg_good > avg_anti
-    assert avg_good - avg_anti >= 20, f"Avg Good ({avg_good:.1f}) should be higher than Anti ({avg_anti:.1f})"
+    assert avg_good - avg_anti >= 20, (
+        f"Avg Good ({avg_good:.1f}) should be higher than Anti ({avg_anti:.1f})"
+    )

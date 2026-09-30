@@ -1,12 +1,8 @@
 """Tests for db/benchmark.py module."""
 
-import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from db.benchmark import (
-    BenchmarkComparison,
     BenchmarkMetrics,
     benchmark_query,
     compare_queries,
@@ -48,12 +44,18 @@ def test_benchmark_query_mock_timings(mock_perf):
     # Run 4: 0.040s (40ms)
     # Run 5: 0.050s (50ms)
     timestamps = [
-        1.0, 1.05,  # warmup
-        2.0, 2.01,  # 10ms
-        3.0, 3.02,  # 20ms
-        4.0, 4.03,  # 30ms
-        5.0, 5.04,  # 40ms
-        6.0, 6.05,  # 50ms
+        1.0,
+        1.05,  # warmup
+        2.0,
+        2.01,  # 10ms
+        3.0,
+        3.02,  # 20ms
+        4.0,
+        4.03,  # 30ms
+        5.0,
+        5.04,  # 40ms
+        6.0,
+        6.05,  # 50ms
     ]
     mock_perf.side_effect = timestamps
 
@@ -77,13 +79,25 @@ def test_compare_queries_calculates_speedup():
     with patch("db.benchmark.benchmark_query") as mock_bm:
         # Original: median 100ms, 50 rows
         orig_m = BenchmarkMetrics(
-            runs=5, warmup_runs=1, min_ms=90.0, median_ms=100.0, p95_ms=110.0, mean_ms=100.0,
-            rows_returned=50, success=True,
+            runs=5,
+            warmup_runs=1,
+            min_ms=90.0,
+            median_ms=100.0,
+            p95_ms=110.0,
+            mean_ms=100.0,
+            rows_returned=50,
+            success=True,
         )
         # Rewritten: median 20ms, 50 rows
         rew_m = BenchmarkMetrics(
-            runs=5, warmup_runs=1, min_ms=18.0, median_ms=20.0, p95_ms=25.0, mean_ms=21.0,
-            rows_returned=50, success=True,
+            runs=5,
+            warmup_runs=1,
+            min_ms=18.0,
+            median_ms=20.0,
+            p95_ms=25.0,
+            mean_ms=21.0,
+            rows_returned=50,
+            success=True,
         )
         mock_bm.side_effect = [orig_m, rew_m]
 

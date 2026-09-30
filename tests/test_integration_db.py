@@ -7,18 +7,20 @@ Marked with @pytest.mark.db and executed ONLY when TEST_DB_URL environment varia
 from __future__ import annotations
 
 import os
+
 import pytest
 from sqlalchemy import create_engine, text
 
 from db.benchmark import benchmark_query
-from db.connection import DBConfig, build_engine, test_connection as db_test_connection
 from db.explain import run_explain
 from db.schema import load_schema_from_db
 
 TEST_DB_URL = os.getenv("TEST_DB_URL")
 
 
-@pytest.mark.skipif(not TEST_DB_URL, reason="TEST_DB_URL environment variable not set (real MySQL required)")
+@pytest.mark.skipif(
+    not TEST_DB_URL, reason="TEST_DB_URL environment variable not set (real MySQL required)"
+)
 @pytest.mark.db
 class TestLiveMySQLIntegration:
     """Live database integration tests against MySQL 8.x."""

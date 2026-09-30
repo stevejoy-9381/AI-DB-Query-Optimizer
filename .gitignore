@@ -61,3 +61,13 @@ Thumbs.db
 logs/
 *.log
 data/history.db
+
+# Frontend & Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+playwright-report/
+frontend/playwright-report/
+test-results/
+frontend/test-results/
+tests/load/results/

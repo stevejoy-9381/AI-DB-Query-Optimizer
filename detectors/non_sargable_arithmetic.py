@@ -43,21 +43,23 @@ class NonSargableArithmeticDetector(BaseDetector):
                     col = side.find(exp.Column)
                     if col:
                         col_name = col.name
-                        findings.append(Finding(
-                            code=self.code,
-                            severity=self.severity,
-                            score_delta=self.score_delta,
-                            message=(
-                                f"Arithmetic expression performed on column `{col_name}` in WHERE filter makes the condition non-sargable. "
-                                "MySQL cannot use an index on this column because each row must be evaluated."
-                            ),
-                            fix_example=(
-                                "-- Before (Non-sargable)\n"
-                                f"WHERE {col_name} + 10 > 100;\n\n"
-                                "-- After (Sargable - column isolated)\n"
-                                f"WHERE {col_name} > 100 - 10;"
-                            ),
-                        ))
+                        findings.append(
+                            Finding(
+                                code=self.code,
+                                severity=self.severity,
+                                score_delta=self.score_delta,
+                                message=(
+                                    f"Arithmetic expression performed on column `{col_name}` in WHERE filter makes the condition non-sargable. "
+                                    "MySQL cannot use an index on this column because each row must be evaluated."
+                                ),
+                                fix_example=(
+                                    "-- Before (Non-sargable)\n"
+                                    f"WHERE {col_name} + 10 > 100;\n\n"
+                                    "-- After (Sargable - column isolated)\n"
+                                    f"WHERE {col_name} > 100 - 10;"
+                                ),
+                            )
+                        )
                         return findings
 
         return findings

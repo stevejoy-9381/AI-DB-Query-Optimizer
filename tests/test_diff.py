@@ -41,7 +41,7 @@ def test_diff_with_modifications():
     assert len(diff.left_lines) == len(diff.right_lines)
     # At least one line modified or replaced
     tags = {line.tag for line in diff.left_lines} | {r.tag for r in diff.right_lines}
-    assert ("replace" in tags or "delete" in tags or "insert" in tags)
+    assert "replace" in tags or "delete" in tags or "insert" in tags
 
 
 def test_diff_with_limit_addition():

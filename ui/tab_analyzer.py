@@ -42,11 +42,22 @@ from utils.helpers import (
 def render_tab_analyzer(sidebar_state: SidebarState) -> None:
     """Render Tab 1: Query Analyzer UI."""
     default_query = ""
-    if sidebar_state.selected_sample != "— Select a sample —":
+    qp_query = st.query_params.get("query")
+    if qp_query:
+        default_query = qp_query
+        if "main_query_input" not in st.session_state or not st.session_state["main_query_input"]:
+            st.session_state["main_query_input"] = qp_query
+    elif sidebar_state.selected_sample != "— Select a sample —":
         default_query = sidebar_state.selected_sample
+        st.session_state["main_query_input"] = default_query
+
+    if "main_query_input" not in st.session_state or not st.session_state["main_query_input"]:
+        st.session_state["main_query_input"] = default_query
 
     if not sidebar_state.is_connected:
-        st.info("ℹ️ **Demo Mode**: Offline estimates only (not connected to a live database). Schema and index advice use sample `shop_db`.")
+        st.info(
+            "ℹ️ **Demo Mode**: Offline estimates only (not connected to a live database). Schema and index advice use sample `shop_db`."
+        )
 
     col_input, col_tips = st.columns([3, 1])
 
@@ -54,7 +65,6 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         st.markdown('<div class="section-header">SQL Query Input</div>', unsafe_allow_html=True)
         query_input = st.text_area(
             "Paste your SQL query below",
-            value=default_query,
             height=180,
             placeholder="SELECT * FROM orders WHERE customer_id = 10",
             label_visibility="collapsed",
@@ -72,10 +82,16 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
             "- Filtering / ordering"
         )
 
-    analyze_btn = st.button("⚡ Analyze Query", type="primary", use_container_width=True, key="btn_analyze_query")
+    analyze_btn = st.button(
+        "⚡ Analyze Query", type="primary", use_container_width=True, key="btn_analyze_query"
+    )
+    auto_analyze = st.query_params.get("auto_analyze") in ("1", "true", "True")
 
-    if analyze_btn:
+    if analyze_btn or (
+        auto_analyze and query_input.strip() and st.session_state.get(KEY_LAST_RESULT) is None
+    ):
         from utils.validation import validate_sql_input
+
         is_valid, validation_err = validate_sql_input(query_input)
         if not is_valid:
             st.error(f"⚠️ {validation_err}")
@@ -85,35 +101,35 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
 
         with st.spinner("Running analysis pipeline…"):
             active_schema = sidebar_state.active_schema
-            analysis      = analyze_query(query, schema=active_schema)
-            score_result  = compute_score(analysis, schema=active_schema)
-            opt_score     = simulate_optimized_score(analysis)
+            analysis = analyze_query(query, schema=active_schema)
+            score_result = compute_score(analysis, schema=active_schema)
+            opt_score = simulate_optimized_score(analysis)
             optimizations = generate_optimizations(query, analysis)
-            index_recs    = generate_index_recommendations(query, analysis, schema=active_schema)
-            ai_data       = get_ai_insight(
+            index_recs = generate_index_recommendations(query, analysis, schema=active_schema)
+            ai_data = get_ai_insight(
                 query=query,
                 analysis=analysis,
                 score=score_result.total,
                 schema=active_schema,
                 enabled=sidebar_state.enable_ai,
             )
-            ai_insight    = ai_data["insight"]
-            ai_source     = ai_data["source"]
-            ai_suggested  = ai_data.get("suggested_query")
+            ai_insight = ai_data["insight"]
+            ai_source = ai_data["source"]
+            ai_suggested = ai_data.get("suggested_query")
             ai_rewrite_status = ai_data.get("rewrite_status")
             formatted_sql = format_sql(query)
 
         # Store for Advanced Analysis tab
         st.session_state[KEY_LAST_RESULT] = {
-            "query":             query,
-            "analysis":          analysis,
-            "score_result":      score_result,
-            "opt_score":         opt_score,
-            "optimizations":     optimizations,
-            "index_recs":        index_recs,
-            "ai_insight":        ai_insight,
-            "ai_source":         ai_source,
-            "ai_suggested":      ai_suggested,
+            "query": query,
+            "analysis": analysis,
+            "score_result": score_result,
+            "opt_score": opt_score,
+            "optimizations": optimizations,
+            "index_recs": index_recs,
+            "ai_insight": ai_insight,
+            "ai_source": ai_source,
+            "ai_suggested": ai_suggested,
             "ai_rewrite_status": ai_rewrite_status,
         }
 
@@ -126,6 +142,7 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         if st.session_state.get("save_history_locally", True):
             try:
                 from history_store import HistoryStore
+
                 store = HistoryStore()
                 store.add(
                     query=query,
@@ -149,7 +166,10 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
                 )
             except Exception as hist_err:
                 import logging
-                logging.getLogger(__name__).warning("Failed to persist history record: %s", hist_err)
+
+                logging.getLogger(__name__).warning(
+                    "Failed to persist history record: %s", hist_err
+                )
 
         st.markdown("---")
 
@@ -162,9 +182,9 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
             st.markdown(
                 f'<div class="score-card">'
                 f'<div class="score-number" style="color:{color};font-size:1.8rem">'
-                f'{analysis["complexity"]}</div>'
+                f"{analysis['complexity']}</div>"
                 f'<div class="score-label">COMPLEXITY</div>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
         with k3:
@@ -172,28 +192,30 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
             st.markdown(
                 f'<div class="score-card">'
                 f'<div class="score-number" style="color:{color};font-size:1.8rem">'
-                f'{score_result.cost_estimate}</div>'
+                f"{score_result.cost_estimate}</div>"
                 f'<div class="score-label">EST. COST</div>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
         with k4:
             st.markdown(
                 f'<div class="score-card">'
                 f'<div class="score-number" style="color:#3498db;font-size:1.8rem">'
-                f'{score_result.rows_scanned_estimate}</div>'
+                f"{score_result.rows_scanned_estimate}</div>"
                 f'<div class="score-label">EST. ROWS SCANNED</div>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
         with k5:
             issue_count = len(analysis["issues"]) + len(analysis["warnings"])
-            color = "#2ecc71" if issue_count == 0 else ("#f39c12" if issue_count <= 2 else "#e74c3c")
+            color = (
+                "#2ecc71" if issue_count == 0 else ("#f39c12" if issue_count <= 2 else "#e74c3c")
+            )
             st.markdown(
                 f'<div class="score-card">'
                 f'<div class="score-number" style="color:{color}">{issue_count}</div>'
                 f'<div class="score-label">ISSUES DETECTED</div>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
@@ -206,15 +228,25 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
             st.plotly_chart(create_score_gauge(score_result.total), use_container_width=True)
 
         with ch2:
-            st.markdown('<div class="section-header">📈 Optimization Simulation</div>', unsafe_allow_html=True)
-            st.plotly_chart(create_optimization_sim_bar(score_result.total, opt_score), use_container_width=True)
+            st.markdown(
+                '<div class="section-header">📈 Optimization Simulation</div>',
+                unsafe_allow_html=True,
+            )
+            st.plotly_chart(
+                create_optimization_sim_bar(score_result.total, opt_score), use_container_width=True
+            )
 
         with ch3:
-            st.markdown('<div class="section-header">🔍 Pattern Detection</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="section-header">🔍 Pattern Detection</div>', unsafe_allow_html=True
+            )
             st.plotly_chart(create_pattern_detection_bar(analysis), use_container_width=True)
 
         # ---- Row 2b: Score Breakdown Waterfall Chart ----
-        st.markdown('<div class="section-header">🧮 Explainable Score Breakdown</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="section-header">🧮 Explainable Score Breakdown</div>',
+            unsafe_allow_html=True,
+        )
         if score_result.breakdown:
             st.plotly_chart(create_waterfall_chart(score_result), use_container_width=True)
         else:
@@ -226,7 +258,9 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         col_issues, col_sql = st.columns([1, 1])
 
         with col_issues:
-            st.markdown('<div class="section-header">⚠️ Issues Detected</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="section-header">⚠️ Issues Detected</div>', unsafe_allow_html=True
+            )
             if not analysis["issues"] and not analysis["warnings"]:
                 st.markdown(
                     '<div class="success-card">✅ No issues detected — this query looks well-structured!</div>',
@@ -236,15 +270,15 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
                 for iss in analysis["issues"]:
                     st.markdown(
                         f'<div class="issue-card">'
-                        f'<strong>{severity_badge(iss["severity"])}</strong>&nbsp; {iss["message"]}'
-                        f'</div>',
+                        f"<strong>{severity_badge(iss['severity'])}</strong>&nbsp; {iss['message']}"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
                 for warn in analysis["warnings"]:
                     st.markdown(
                         f'<div class="warning-card">'
-                        f'<strong>{severity_badge(warn["severity"])}</strong>&nbsp; {warn["message"]}'
-                        f'</div>',
+                        f"<strong>{severity_badge(warn['severity'])}</strong>&nbsp; {warn['message']}"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
 
@@ -252,7 +286,9 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
                 bd_df = pd.DataFrame(score_result.breakdown)
                 if not bd_df.empty:
                     bd_df["delta"] = bd_df["delta"].apply(lambda d: f"+{d}" if d > 0 else str(d))
-                    st.dataframe(bd_df[["label", "delta"]], use_container_width=True, hide_index=True)
+                    st.dataframe(
+                        bd_df[["label", "delta"]], use_container_width=True, hide_index=True
+                    )
                 else:
                     st.write("No scoring rules applied.")
 
@@ -263,7 +299,7 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
             st.markdown(
                 f'<div class="section-header" style="margin-top:1rem">'
                 f'💡 Performance Insight <span style="font-size:0.75rem; background:#222; border:1px solid #444; padding:2px 8px; border-radius:4px; margin-left:8px; vertical-align:middle;">🏷️ {ai_source}</span>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
             st.info(ai_insight)
@@ -279,7 +315,10 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         st.markdown("---")
 
         # ---- Row 4: Optimization Recommendations ----
-        st.markdown('<div class="section-header">🚀 Optimization Recommendations</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="section-header">🚀 Optimization Recommendations</div>',
+            unsafe_allow_html=True,
+        )
         if not optimizations:
             st.success("✅ No optimization suggestions — query already follows best practices.")
         else:
@@ -291,7 +330,9 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         st.markdown("---")
 
         # ---- Row 5: Index Recommendations ----
-        st.markdown('<div class="section-header">🗂️ Index Recommendations</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="section-header">🗂️ Index Recommendations</div>', unsafe_allow_html=True
+        )
         if not index_recs:
             st.info("No specific index recommendations for this query.")
         else:
@@ -325,7 +366,9 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         if active_schema:
             redundant_indexes = detect_redundant_indexes(active_schema)
             if redundant_indexes:
-                with st.expander(f"⚠️ Redundant & Duplicate Index Audit ({len(redundant_indexes)} found in schema)"):
+                with st.expander(
+                    f"⚠️ Redundant & Duplicate Index Audit ({len(redundant_indexes)} found in schema)"
+                ):
                     st.caption(
                         "The MySQL leftmost prefix rule makes sub-indexes redundant when a wider composite index already exists. "
                         "Review suggestions below to eliminate write overhead and save disk space."
@@ -338,12 +381,34 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         st.markdown("---")
 
         # ---- Row 6: Export Report ----
-        st.markdown('<div class="section-header">📤 Export Analysis Report</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="section-header">📤 Export Analysis Report</div>', unsafe_allow_html=True
+        )
         ex1, ex2, ex3 = st.columns(3)
 
-        json_report = build_json_report(query, analysis, score_result, optimizations, index_recs, opt_score, insight_text=ai_insight, insight_source=ai_source)
-        csv_report  = build_csv_report(query, analysis, score_result, opt_score, insight_source=ai_source)
-        text_report = build_text_report(query, analysis, score_result, optimizations, index_recs, opt_score, ai_insight, insight_source=ai_source)
+        json_report = build_json_report(
+            query,
+            analysis,
+            score_result,
+            optimizations,
+            index_recs,
+            opt_score,
+            insight_text=ai_insight,
+            insight_source=ai_source,
+        )
+        csv_report = build_csv_report(
+            query, analysis, score_result, opt_score, insight_source=ai_source
+        )
+        text_report = build_text_report(
+            query,
+            analysis,
+            score_result,
+            optimizations,
+            index_recs,
+            opt_score,
+            ai_insight,
+            insight_source=ai_source,
+        )
 
         with ex1:
             st.download_button(
@@ -383,14 +448,28 @@ def render_tab_analyzer(sidebar_state: SidebarState) -> None:
         )
         sample_col1, sample_col2, sample_col3 = st.columns(3)
         with sample_col1:
-            if st.button("🛒 Sample: Unindexed JOIN", use_container_width=True, key="empty_sample_join"):
-                st.session_state["main_query_input"] = "SELECT c.name, o.id FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.name LIKE '%Smith';"
+            if st.button(
+                "🛒 Sample: Unindexed JOIN", use_container_width=True, key="empty_sample_join"
+            ):
+                st.session_state["main_query_input"] = (
+                    "SELECT c.name, o.id FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.name LIKE '%Smith';"
+                )
                 st.rerun()
         with sample_col2:
-            if st.button("📊 Sample: Aggregate Without Index", use_container_width=True, key="empty_sample_agg"):
-                st.session_state["main_query_input"] = "SELECT status, count(*) FROM orders GROUP BY status HAVING count(*) > 10;"
+            if st.button(
+                "📊 Sample: Aggregate Without Index",
+                use_container_width=True,
+                key="empty_sample_agg",
+            ):
+                st.session_state["main_query_input"] = (
+                    "SELECT status, count(*) FROM orders GROUP BY status HAVING count(*) > 10;"
+                )
                 st.rerun()
         with sample_col3:
-            if st.button("⚠️ Sample: Leading Wildcard", use_container_width=True, key="empty_sample_wild"):
-                st.session_state["main_query_input"] = "SELECT * FROM products WHERE name LIKE '%electronics%';"
+            if st.button(
+                "⚠️ Sample: Leading Wildcard", use_container_width=True, key="empty_sample_wild"
+            ):
+                st.session_state["main_query_input"] = (
+                    "SELECT * FROM products WHERE name LIKE '%electronics%';"
+                )
                 st.rerun()

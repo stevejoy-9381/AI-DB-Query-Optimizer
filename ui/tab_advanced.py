@@ -27,37 +27,39 @@ from utils.diff import generate_side_by_side_diff, render_diff_html
 from utils.helpers import cost_color, score_color
 
 _NODE_COLORS = {
-    "ALL":             "#e74c3c",
-    "REF":             "#2ecc71",
-    "EQ_REF":          "#2ecc71",
-    "CONST":           "#1abc9c",
-    "RANGE":           "#27ae60",
-    "INDEX":           "#f39c12",
-    "ref":             "#2ecc71",
-    "range":           "#27ae60",
-    "eq_ref":          "#2ecc71",
-    "const":           "#1abc9c",
-    "index":           "#f39c12",
-    "Ordering":        "#8e44ad",
-    "Grouping":        "#16a085",
-    "Filter":          "#3498db",
-    "filesort":        "#8e44ad",
-    "temporary":       "#d35400",
-    "Hash Join":       "#e67e22",
-    "Nested Loop":     "#d35400",
-    "Aggregate":       "#16a085",
-    "Limit":           "#7f8c8d",
-    "Subquery":        "#c0392b",
-    "Result":          "#2980b9",
-    "Seq Scan":        "#e74c3c",
-    "Index Scan":      "#2ecc71",
-    "Sort":            "#8e44ad",
+    "ALL": "#e74c3c",
+    "REF": "#2ecc71",
+    "EQ_REF": "#2ecc71",
+    "CONST": "#1abc9c",
+    "RANGE": "#27ae60",
+    "INDEX": "#f39c12",
+    "ref": "#2ecc71",
+    "range": "#27ae60",
+    "eq_ref": "#2ecc71",
+    "const": "#1abc9c",
+    "index": "#f39c12",
+    "Ordering": "#8e44ad",
+    "Grouping": "#16a085",
+    "Filter": "#3498db",
+    "filesort": "#8e44ad",
+    "temporary": "#d35400",
+    "Hash Join": "#e67e22",
+    "Nested Loop": "#d35400",
+    "Aggregate": "#16a085",
+    "Limit": "#7f8c8d",
+    "Subquery": "#c0392b",
+    "Result": "#2980b9",
+    "Seq Scan": "#e74c3c",
+    "Index Scan": "#2ecc71",
+    "Sort": "#8e44ad",
 }
 
 
 def render_tab_advanced() -> None:
     """Render Tab 5: Advanced Analysis UI."""
-    st.markdown('<div class="section-header">🔬 Advanced Analysis Tools</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-header">🔬 Advanced Analysis Tools</div>', unsafe_allow_html=True
+    )
 
     lr = st.session_state.get(KEY_LAST_RESULT)
     if lr is None:
@@ -67,9 +69,9 @@ def render_tab_advanced() -> None:
         )
         return
 
-    adv_query    = lr["query"]
+    adv_query = lr["query"]
     adv_analysis = lr["analysis"]
-    adv_score    = lr["score_result"]
+    adv_score = lr["score_result"]
 
     st.markdown(
         f"Showing advanced analysis for: `{adv_query[:80]}{'…' if len(adv_query) > 80 else ''}`"
@@ -79,7 +81,10 @@ def render_tab_advanced() -> None:
     # ===================================================================
     # SECTION 1 — Execution Plan Visualizer
     # ===================================================================
-    st.markdown('<div class="section-header">📋 Query Execution Plan Visualizer</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-header">📋 Query Execution Plan Visualizer</div>',
+        unsafe_allow_html=True,
+    )
 
     engine = st.session_state.get(KEY_DB_ENGINE)
     is_connected = engine is not None
@@ -118,9 +123,14 @@ def render_tab_advanced() -> None:
                 explain_warnings = explain_res.get("warnings", [])
                 raw_analyze_output = explain_res.get("raw_analyze_text")
                 raw_explain_json = explain_res.get("raw_json")
-                st.success(f"🟢 **Live Database Plan:** Real MySQL 8.x EXPLAIN output (Server: `{explain_res.get('mysql_version')}`)", icon="✅")
+                st.success(
+                    f"🟢 **Live Database Plan:** Real MySQL 8.x EXPLAIN output (Server: `{explain_res.get('mysql_version')}`)",
+                    icon="✅",
+                )
             else:
-                st.warning(f"⚠️ **Real EXPLAIN Notice:** {explain_res.get('error')} — Falling back to simulated plan.")
+                st.warning(
+                    f"⚠️ **Real EXPLAIN Notice:** {explain_res.get('error')} — Falling back to simulated plan."
+                )
                 plan_root = generate_execution_plan(adv_query, adv_analysis)
                 st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (Fallback)", icon="ℹ️")
         else:
@@ -134,7 +144,10 @@ def render_tab_advanced() -> None:
         )
     else:
         plan_root = generate_execution_plan(adv_query, adv_analysis)
-        st.info("⚪ **Plan Source:** Simulated MySQL 8.x Plan (Connect to MySQL in sidebar for real EXPLAIN)", icon="ℹ️")
+        st.info(
+            "⚪ **Plan Source:** Simulated MySQL 8.x Plan (Connect to MySQL in sidebar for real EXPLAIN)",
+            icon="ℹ️",
+        )
 
     if explain_warnings:
         st.markdown("##### ⚠️ Live Execution Plan Optimizer Findings")
@@ -204,8 +217,8 @@ def render_tab_advanced() -> None:
         edge_x += [px_val, (px_val + cx_val) / 2, cx_val, None]
         edge_y += [py_val, (py_val + cy_val) / 2, cy_val, None]
 
-    node_x     = [positions[id(n)][0] for n in all_plan_nodes]
-    node_y     = [positions[id(n)][1] for n in all_plan_nodes]
+    node_x = [positions[id(n)][0] for n in all_plan_nodes]
+    node_y = [positions[id(n)][1] for n in all_plan_nodes]
     node_label = [n.node_type for n in all_plan_nodes]
     node_hover = [
         f"<b>{n.node_type}</b><br>{n.description}<br>Est. Rows: {n.estimated_rows:,}<br>Cost: {n.cost_label}"
@@ -215,24 +228,32 @@ def render_tab_advanced() -> None:
 
     fig_plan = go.Figure()
     if edge_x:
-        fig_plan.add_trace(go.Scatter(
-            x=edge_x, y=edge_y,
-            mode="lines",
-            line=dict(color="#555", width=2),
-            hoverinfo="none",
+        fig_plan.add_trace(
+            go.Scatter(
+                x=edge_x,
+                y=edge_y,
+                mode="lines",
+                line=dict(color="#555", width=2),
+                hoverinfo="none",
+                showlegend=False,
+            )
+        )
+    fig_plan.add_trace(
+        go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            marker=dict(
+                size=55, color=node_colors, line=dict(color="white", width=2), symbol="circle"
+            ),
+            text=node_label,
+            textposition="middle center",
+            textfont=dict(color="white", size=9.5),
+            hovertext=node_hover,
+            hoverinfo="text",
             showlegend=False,
-        ))
-    fig_plan.add_trace(go.Scatter(
-        x=node_x, y=node_y,
-        mode="markers+text",
-        marker=dict(size=55, color=node_colors, line=dict(color="white", width=2), symbol="circle"),
-        text=node_label,
-        textposition="middle center",
-        textfont=dict(color="white", size=9.5),
-        hovertext=node_hover,
-        hoverinfo="text",
-        showlegend=False,
-    ))
+        )
+    )
     fig_plan.update_layout(
         height=max(350, len(set(positions[id(n)][1] for n in all_plan_nodes)) * 100),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -266,7 +287,9 @@ def render_tab_advanced() -> None:
     # ===================================================================
     # SECTION 2 — Index Impact Simulator
     # ===================================================================
-    st.markdown('<div class="section-header">⚡ Index Impact Simulator</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-header">⚡ Index Impact Simulator</div>', unsafe_allow_html=True
+    )
     st.caption("Projects query performance before and after applying the recommended indexes.")
 
     impact = simulate_index_impact(adv_query, adv_analysis, adv_score)
@@ -312,12 +335,30 @@ def render_tab_advanced() -> None:
     st.markdown("")
 
     fig_impact = go.Figure()
-    metrics      = ["Score", "Est. Time (ms)"]
-    before_vals  = [impact["before_score"], min(impact["before_time_ms"], 2000)]
-    after_vals   = [impact["after_score"],  min(impact["after_time_ms"],  2000)]
+    metrics = ["Score", "Est. Time (ms)"]
+    before_vals = [impact["before_score"], min(impact["before_time_ms"], 2000)]
+    after_vals = [impact["after_score"], min(impact["after_time_ms"], 2000)]
 
-    fig_impact.add_trace(go.Bar(name="Before Indexes", x=metrics, y=before_vals, marker_color="#e74c3c", text=[str(v) for v in before_vals], textposition="auto"))
-    fig_impact.add_trace(go.Bar(name="After Indexes", x=metrics, y=after_vals, marker_color="#2ecc71", text=[str(v) for v in after_vals], textposition="auto"))
+    fig_impact.add_trace(
+        go.Bar(
+            name="Before Indexes",
+            x=metrics,
+            y=before_vals,
+            marker_color="#e74c3c",
+            text=[str(v) for v in before_vals],
+            textposition="auto",
+        )
+    )
+    fig_impact.add_trace(
+        go.Bar(
+            name="After Indexes",
+            x=metrics,
+            y=after_vals,
+            marker_color="#2ecc71",
+            text=[str(v) for v in after_vals],
+            textposition="auto",
+        )
+    )
     fig_impact.update_layout(
         barmode="group",
         height=300,
@@ -332,7 +373,9 @@ def render_tab_advanced() -> None:
     st.plotly_chart(fig_impact, use_container_width=True)
 
     if impact["indexed_columns"]:
-        st.info(f"📌 Columns to index: **{', '.join(impact['indexed_columns'])}**  →  estimated **{impact['speedup_label']}** after indexing.")
+        st.info(
+            f"📌 Columns to index: **{', '.join(impact['indexed_columns'])}**  →  estimated **{impact['speedup_label']}** after indexing."
+        )
 
     st.markdown("---")
 
@@ -374,7 +417,9 @@ def render_tab_advanced() -> None:
             st.markdown(f'<div class="success-card">✅ {change}</div>', unsafe_allow_html=True)
 
         if rewrite["rewrite_score_est"] > 0:
-            st.success(f"⚡ Applying these rewrites could add approximately **+{rewrite['rewrite_score_est']} points** to the performance score.")
+            st.success(
+                f"⚡ Applying these rewrites could add approximately **+{rewrite['rewrite_score_est']} points** to the performance score."
+            )
 
         st.markdown("##### 📋 Copy Final Optimized SQL")
         st.code(rewrite["rewritten"], language="sql")
@@ -392,8 +437,12 @@ def render_tab_advanced() -> None:
         if engine is not None and is_safe_for_live:
             st.markdown("---")
             if st.button("🧪 Validate Rewrite on Live Sample Data", key="btn_validate_data"):
-                with st.spinner("Executing original and rewritten queries with row cap to verify multiset equivalence..."):
-                    data_val = validate_rewrite_data(engine, adv_query, rewrite["rewritten"], row_cap=100)
+                with st.spinner(
+                    "Executing original and rewritten queries with row cap to verify multiset equivalence..."
+                ):
+                    data_val = validate_rewrite_data(
+                        engine, adv_query, rewrite["rewritten"], row_cap=100
+                    )
                 st.markdown(
                     f'**Empirical Data Validation:** <span style="background:{data_val.badge_color};color:white;padding:3px 10px;border-radius:12px;font-weight:600;font-size:0.85rem;">{data_val.level}</span>',
                     unsafe_allow_html=True,
@@ -409,11 +458,19 @@ def render_tab_advanced() -> None:
     # SECTION 4 — Live Query Execution Benchmarking
     # ===================================================================
     st.markdown("---")
-    st.markdown('<div class="section-header">⏱️ Live Query Execution Benchmarking</div>', unsafe_allow_html=True)
-    st.caption("Measure actual wall-clock execution times (min, median, p95, mean) on your live MySQL database.")
+    st.markdown(
+        '<div class="section-header">⏱️ Live Query Execution Benchmarking</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Measure actual wall-clock execution times (min, median, p95, mean) on your live MySQL database."
+    )
 
     if engine is None:
-        st.info("⚪ **Offline Mode:** Connect to a MySQL database in the sidebar to benchmark queries live.", icon="ℹ️")
+        st.info(
+            "⚪ **Offline Mode:** Connect to a MySQL database in the sidebar to benchmark queries live.",
+            icon="ℹ️",
+        )
     elif not is_safe_for_live:
         st.warning(
             f"🛡️ **Safety Guard Active:** Live benchmarking is strictly disabled for `{adv_stmt_type}` statements to prevent accidental table locks or data mutations.",
@@ -423,9 +480,13 @@ def render_tab_advanced() -> None:
         default_compare_sql = rewrite["rewritten"] if rewrite.get("is_changed") else adv_query
         bc_col1, bc_col2 = st.columns([1, 1])
         with bc_col1:
-            bm_runs = st.slider("Timed Runs", min_value=3, max_value=15, value=5, step=1, key="bm_runs")
+            bm_runs = st.slider(
+                "Timed Runs", min_value=3, max_value=15, value=5, step=1, key="bm_runs"
+            )
         with bc_col2:
-            bm_warmup = st.slider("Warmup Runs", min_value=0, max_value=3, value=1, step=1, key="bm_warmup")
+            bm_warmup = st.slider(
+                "Warmup Runs", min_value=0, max_value=3, value=1, step=1, key="bm_warmup"
+            )
 
         compare_input = st.text_area(
             "Query to compare against original (e.g. rewritten query)",
@@ -435,32 +496,71 @@ def render_tab_advanced() -> None:
         )
 
         if st.button("🚀 Run Live Benchmark", type="primary", use_container_width=True):
-            with st.spinner(f"Running benchmark ({bm_warmup} warmup + {bm_runs} iterations on live MySQL)..."):
-                comp_res = compare_queries(engine, adv_query, compare_input, runs=bm_runs, warmup=bm_warmup)
+            with st.spinner(
+                f"Running benchmark ({bm_warmup} warmup + {bm_runs} iterations on live MySQL)..."
+            ):
+                comp_res = compare_queries(
+                    engine, adv_query, compare_input, runs=bm_runs, warmup=bm_warmup
+                )
 
             if comp_res.original.success and comp_res.rewritten.success:
                 bk1, bk2, bk3, bk4 = st.columns(4)
                 with bk1:
-                    st.markdown(f'<div class="score-card"><div class="score-number" style="color:#e74c3c;font-size:1.6rem">{comp_res.original.median_ms:.2f} ms</div><div class="score-label">ORIGINAL (MEDIAN)</div></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="score-card"><div class="score-number" style="color:#e74c3c;font-size:1.6rem">{comp_res.original.median_ms:.2f} ms</div><div class="score-label">ORIGINAL (MEDIAN)</div></div>',
+                        unsafe_allow_html=True,
+                    )
                 with bk2:
-                    st.markdown(f'<div class="score-card"><div class="score-number" style="color:#2ecc71;font-size:1.6rem">{comp_res.rewritten.median_ms:.2f} ms</div><div class="score-label">REWRITTEN (MEDIAN)</div></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="score-card"><div class="score-number" style="color:#2ecc71;font-size:1.6rem">{comp_res.rewritten.median_ms:.2f} ms</div><div class="score-label">REWRITTEN (MEDIAN)</div></div>',
+                        unsafe_allow_html=True,
+                    )
                 with bk3:
                     speed_color = "#2ecc71" if comp_res.speedup_factor >= 1.0 else "#e74c3c"
-                    st.markdown(f'<div class="score-card"><div class="score-number" style="color:{speed_color};font-size:1.6rem">{comp_res.speedup_factor:.2f}×</div><div class="score-label">MEASURED SPEEDUP</div></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="score-card"><div class="score-number" style="color:{speed_color};font-size:1.6rem">{comp_res.speedup_factor:.2f}×</div><div class="score-label">MEASURED SPEEDUP</div></div>',
+                        unsafe_allow_html=True,
+                    )
                 with bk4:
                     row_status = "✅ Match" if comp_res.row_counts_match else "⚠️ Mismatch"
-                    st.markdown(f'<div class="score-card"><div class="score-number" style="color:#a8b2d8;font-size:1.4rem">{row_status}</div><div class="score-label">{comp_res.original.rows_returned} vs {comp_res.rewritten.rows_returned} ROWS</div></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="score-card"><div class="score-number" style="color:#a8b2d8;font-size:1.4rem">{row_status}</div><div class="score-label">{comp_res.original.rows_returned} vs {comp_res.rewritten.rows_returned} ROWS</div></div>',
+                        unsafe_allow_html=True,
+                    )
 
                 if comp_res.warning:
                     st.warning(comp_res.warning)
 
                 fig_bm = go.Figure()
-                metrics_names = ["Min Latency", "Median Latency", "95th Percentile (p95)", "Mean Latency"]
-                orig_vals = [comp_res.original.min_ms, comp_res.original.median_ms, comp_res.original.p95_ms, comp_res.original.mean_ms]
-                rew_vals = [comp_res.rewritten.min_ms, comp_res.rewritten.median_ms, comp_res.rewritten.p95_ms, comp_res.rewritten.mean_ms]
+                metrics_names = [
+                    "Min Latency",
+                    "Median Latency",
+                    "95th Percentile (p95)",
+                    "Mean Latency",
+                ]
+                orig_vals = [
+                    comp_res.original.min_ms,
+                    comp_res.original.median_ms,
+                    comp_res.original.p95_ms,
+                    comp_res.original.mean_ms,
+                ]
+                rew_vals = [
+                    comp_res.rewritten.min_ms,
+                    comp_res.rewritten.median_ms,
+                    comp_res.rewritten.p95_ms,
+                    comp_res.rewritten.mean_ms,
+                ]
 
-                fig_bm.add_trace(go.Bar(name="Original Query", x=metrics_names, y=orig_vals, marker_color="#e74c3c"))
-                fig_bm.add_trace(go.Bar(name="Rewritten Query", x=metrics_names, y=rew_vals, marker_color="#2ecc71"))
+                fig_bm.add_trace(
+                    go.Bar(
+                        name="Original Query", x=metrics_names, y=orig_vals, marker_color="#e74c3c"
+                    )
+                )
+                fig_bm.add_trace(
+                    go.Bar(
+                        name="Rewritten Query", x=metrics_names, y=rew_vals, marker_color="#2ecc71"
+                    )
+                )
                 fig_bm.update_layout(
                     title="Query Latency Comparison (Milliseconds - Lower is Better)",
                     barmode="group",

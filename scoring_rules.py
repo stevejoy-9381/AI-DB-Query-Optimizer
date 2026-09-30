@@ -299,16 +299,32 @@ STATEMENT_SCORE_RULES: dict[str, list[ScoreRuleConfig]] = {
         SCORE_RULES_DICT["UPDATE_DELETE_UNINDEXED_WHERE"],
         SCORE_RULES_DICT["NON_SARGABLE_ARITHMETIC"],
         SCORE_RULES_DICT["FUNCTION_ON_COLUMN"],
-        ScoreRuleConfig("HAS_WHERE", +15, "INFO", "Specific row filter present", "Targeted update with WHERE"),
-        ScoreRuleConfig("HAS_LIMIT", +5, "INFO", "LIMIT clause caps row updates", "LIMIT protects against runaway updates"),
+        ScoreRuleConfig(
+            "HAS_WHERE", +15, "INFO", "Specific row filter present", "Targeted update with WHERE"
+        ),
+        ScoreRuleConfig(
+            "HAS_LIMIT",
+            +5,
+            "INFO",
+            "LIMIT clause caps row updates",
+            "LIMIT protects against runaway updates",
+        ),
     ],
     "DELETE": [
         SCORE_RULES_DICT["DELETE_WITHOUT_WHERE"],
         SCORE_RULES_DICT["UPDATE_DELETE_UNINDEXED_WHERE"],
         SCORE_RULES_DICT["NON_SARGABLE_ARITHMETIC"],
         SCORE_RULES_DICT["FUNCTION_ON_COLUMN"],
-        ScoreRuleConfig("HAS_WHERE", +15, "INFO", "Specific row filter present", "Targeted delete with WHERE"),
-        ScoreRuleConfig("HAS_LIMIT", +5, "INFO", "LIMIT clause caps deletions", "LIMIT protects against runaway deletes"),
+        ScoreRuleConfig(
+            "HAS_WHERE", +15, "INFO", "Specific row filter present", "Targeted delete with WHERE"
+        ),
+        ScoreRuleConfig(
+            "HAS_LIMIT",
+            +5,
+            "INFO",
+            "LIMIT clause caps deletions",
+            "LIMIT protects against runaway deletes",
+        ),
     ],
     "INSERT": [
         SCORE_RULES_DICT["INSERT_SELECT_UNBOUNDED"],
@@ -319,8 +335,12 @@ STATEMENT_SCORE_RULES: dict[str, list[ScoreRuleConfig]] = {
     "INSERT...SELECT": [
         SCORE_RULES_DICT["INSERT_SELECT_UNBOUNDED"],
         SCORE_RULES_DICT["SELECT_STAR"],
-        ScoreRuleConfig("HAS_WHERE", +15, "INFO", "Source table filtered with WHERE", "Source rows filtered"),
-        ScoreRuleConfig("HAS_LIMIT", +10, "INFO", "LIMIT caps transaction batch size", "Batch size bounded"),
+        ScoreRuleConfig(
+            "HAS_WHERE", +15, "INFO", "Source table filtered with WHERE", "Source rows filtered"
+        ),
+        ScoreRuleConfig(
+            "HAS_LIMIT", +10, "INFO", "LIMIT caps transaction batch size", "Batch size bounded"
+        ),
     ],
 }
 
@@ -328,6 +348,7 @@ STATEMENT_SCORE_RULES: dict[str, list[ScoreRuleConfig]] = {
 # ---------------------------------------------------------------------------
 # Schema-Aware Table Multipliers
 # ---------------------------------------------------------------------------
+
 
 def get_table_size_multiplier(estimated_rows: Optional[int]) -> float:
     """Return penalty multiplier based on estimated table row count.

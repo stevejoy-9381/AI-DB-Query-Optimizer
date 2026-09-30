@@ -7,12 +7,13 @@ ranked optimization strategies with example SQL where applicable.
 """
 
 from __future__ import annotations
-import re
 
+import re
 
 # ---------------------------------------------------------------------------
 # Recommendation library
 # ---------------------------------------------------------------------------
+
 
 def _select_star_fix(query: str) -> dict:
     """Suggest replacing SELECT * with explicit columns."""
@@ -54,10 +55,7 @@ def _join_index_fix(filter_cols: list[str]) -> dict:
             "JOIN operations become nested-loop or hash-join full scans when the "
             "join columns lack indexes. Add indexes on both sides of every ON condition."
         ),
-        "example": (
-            f"CREATE INDEX idx_{cols_str.replace(', ', '_')} "
-            f"ON your_table({cols_str});"
-        ),
+        "example": (f"CREATE INDEX idx_{cols_str.replace(', ', '_')} ON your_table({cols_str});"),
     }
 
 
@@ -166,6 +164,7 @@ def _aggregate_full_scan_fix() -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def generate_optimizations(query: str, analysis: dict) -> list[dict]:
     """
     Generate a prioritised list of optimization recommendations.
@@ -179,7 +178,7 @@ def generate_optimizations(query: str, analysis: dict) -> list[dict]:
     -------
     list of recommendation dicts with keys: title, priority, description, example
     """
-    issue_codes   = {i["code"] for i in analysis.get("issues",   [])}
+    issue_codes = {i["code"] for i in analysis.get("issues", [])}
     warning_codes = {w["code"] for w in analysis.get("warnings", [])}
     all_codes = issue_codes | warning_codes
 
@@ -214,25 +213,41 @@ def generate_optimizations(query: str, analysis: dict) -> list[dict]:
     # Plugin-style detector recommendations
     for item in analysis.get("issues", []) + analysis.get("warnings", []):
         code = item.get("code")
-        if code in ("CORRELATED_SUBQUERY", "OR_DIFFERENT_COLUMNS", "IMPLICIT_TYPE_CONVERSION",
-                    "NOT_IN_SUBQUERY", "ORDER_BY_RAND", "UNINDEXED_ORDER_BY", "LARGE_OFFSET",
-                    "MISSING_JOIN_CONDITION", "NON_SARGABLE_ARITHMETIC", "HAVING_AS_WHERE",
-                    "COUNT_DISTINCT", "UNION_INSTEAD_OF_UNION_ALL",
-                    "UPDATE_WITHOUT_WHERE", "DELETE_WITHOUT_WHERE", "UPDATE_DELETE_UNINDEXED_WHERE",
-                    "INSERT_SINGLE_ROW", "INSERT_SELECT_UNBOUNDED",
-                    "CTE_MULTIPLY_REFERENCED", "WINDOW_WITHOUT_PARTITION"):
+        if code in (
+            "CORRELATED_SUBQUERY",
+            "OR_DIFFERENT_COLUMNS",
+            "IMPLICIT_TYPE_CONVERSION",
+            "NOT_IN_SUBQUERY",
+            "ORDER_BY_RAND",
+            "UNINDEXED_ORDER_BY",
+            "LARGE_OFFSET",
+            "MISSING_JOIN_CONDITION",
+            "NON_SARGABLE_ARITHMETIC",
+            "HAVING_AS_WHERE",
+            "COUNT_DISTINCT",
+            "UNION_INSTEAD_OF_UNION_ALL",
+            "UPDATE_WITHOUT_WHERE",
+            "DELETE_WITHOUT_WHERE",
+            "UPDATE_DELETE_UNINDEXED_WHERE",
+            "INSERT_SINGLE_ROW",
+            "INSERT_SELECT_UNBOUNDED",
+            "CTE_MULTIPLY_REFERENCED",
+            "WINDOW_WITHOUT_PARTITION",
+        ):
             title = code.replace("_", " ").title()
             priority = item.get("severity", "MEDIUM")
             desc = item.get("message", "")
             example = item.get("fix_example", "")
             # Avoid duplicate recommendations
             if not any(r["title"] == title for r in recs):
-                recs.append({
-                    "title": title,
-                    "priority": priority,
-                    "description": desc,
-                    "example": example,
-                })
+                recs.append(
+                    {
+                        "title": title,
+                        "priority": priority,
+                        "description": desc,
+                        "example": example,
+                    }
+                )
 
     # Sort: CRITICAL first, then HIGH, then MEDIUM, then LOW
     priority_order = {"CRITICAL": -1, "HIGH": 0, "MEDIUM": 1, "LOW": 2}
@@ -249,9 +264,7 @@ def generate_rule_insight(query: str, analysis: dict, score: int) -> str:
     parts: list[str] = []
 
     complexity = analysis.get("complexity", "Unknown")
-    parts.append(
-        f"This is a **{complexity}** query with a performance score of **{score}/100**."
-    )
+    parts.append(f"This is a **{complexity}** query with a performance score of **{score}/100**.")
 
     issue_codes = {i["code"] for i in analysis.get("issues", [])}
 
@@ -287,8 +300,7 @@ def generate_rule_insight(query: str, analysis: dict, score: int) -> str:
         parts.append("Overall, this query is well-structured and should perform efficiently.")
     elif score >= 50:
         parts.append(
-            "Applying the recommendations above could improve the estimated execution time "
-            "by 2–5×."
+            "Applying the recommendations above could improve the estimated execution time by 2–5×."
         )
     else:
         parts.append(
@@ -302,6 +314,7 @@ def generate_rule_insight(query: str, analysis: dict, score: int) -> str:
 def generate_ai_insight(query: str, analysis: dict, score: int) -> str:
     """Deprecated alias for generate_rule_insight. Retained for backward compatibility."""
     import warnings
+
     warnings.warn(
         "generate_ai_insight is deprecated and will be removed in a future release. Use generate_rule_insight instead.",
         DeprecationWarning,

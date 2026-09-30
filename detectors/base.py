@@ -15,9 +15,10 @@ if TYPE_CHECKING:
 @dataclass
 class Finding:
     """Represents a single anti-pattern or issue discovered by a detector."""
+
     code: str
-    severity: str        # "HIGH", "MEDIUM", "LOW"
-    score_delta: int     # Negative penalty, e.g. -15
+    severity: str  # "HIGH", "MEDIUM", "LOW"
+    score_delta: int  # Negative penalty, e.g. -15
     message: str
     fix_example: str
     category: str = "performance"

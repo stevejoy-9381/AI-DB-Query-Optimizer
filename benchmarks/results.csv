@@ -1,0 +1,21 @@
+query_id,category,query_name,original_time_ms,rewritten_time_ms,speedup,rows_examined_orig,rows_examined_rewritten,equivalent_verified,optimization_type,status,mode
+1,Anti-pattern,Unindexed Foreign Key Filter,384.0,0.39,984.62,200000,18,True,Index Recommendation (B-tree Seek),Improved,calibrated_simulation
+2,Anti-pattern,Non-Sargable Year Function,390.0,15.67,24.89,200000,48500,True,Query Rewrite (Sargable Range),Improved,calibrated_simulation
+3,Anti-pattern,Leading Wildcard Customer Search,18.8,18.61,1.01,10000,10000,True,Index Advice (B-tree Ineffective),No Change,calibrated_simulation
+4,Anti-pattern,Unindexed Multi-Table Join,420.0,3.2,131.25,200000,2400,True (Identical Query + Index),Index Recommendation (Composite),Improved,calibrated_simulation
+5,Anti-pattern,Cartesian Join Products Orders,300.0,285.0,1.05,200000,200000,True,Minor Tuning,No Change,calibrated_simulation
+6,Anti-pattern,Aggregating 500k Rows Without Filter,1050.0,325.0,3.23,500000,500000,True (Identical Query + Index),Index Recommendation (Covering),Improved,calibrated_simulation
+7,Anti-pattern,SELECT * With Large Range,266.0,63.0,4.22,140000,140000,True,Index Recommendation (Range),Improved,calibrated_simulation
+8,Anti-pattern,Correlated Subquery in WHERE,1850.0,28.5,64.91,2000000,30000,True,Index Recommendation (Correlated FK),Improved,calibrated_simulation
+9,Anti-pattern,Order By Without Limit,350.0,72.0,4.86,160000,160000,True (Identical Query + Index),Index Recommendation (Sorted B-tree),Improved,calibrated_simulation
+10,Anti-pattern,Distinct Over Unindexed Join,115.0,12.8,8.98,45000,8500,True (Identical Query + Index),Index Recommendation (Join Filter),Improved,calibrated_simulation
+11,Moderate,Indexed Primary Key Join With Filter,384.0,0.42,914.29,200001,22,True (Identical Query + Index),Index Recommendation (FK Index),Improved,calibrated_simulation
+12,Moderate,Status Filter With Limit,68.0,0.28,242.86,35000,25,True (Identical Query + Index),Index Recommendation (Status Index),Improved,calibrated_simulation
+13,Moderate,Order Date Range Projection,390.0,5.95,65.55,200000,16500,True (Identical Query + Index),Index Recommendation (Date Index),Improved,calibrated_simulation
+14,Moderate,Specific Column Projection Join,384.0,2.45,156.73,200000,1800,True (Identical Query + Index),Index Recommendation (FK Join Index),Improved,calibrated_simulation
+15,Moderate,City Filter With Grouping,390.0,9.0,43.33,200000,18000,True (Identical Query + Index),Index Recommendation (State Composite),Improved,calibrated_simulation
+16,Good,Primary Key Exact Lookup,0.08,0.08,1.0,1,1,True (Identical Query + Index),None (Already Optimal),No Change,calibrated_simulation
+17,Good,Covering Projection via Primary Key,0.45,0.45,1.0,50,50,True (Identical Query + Index),None (Already Optimal),No Change,calibrated_simulation
+18,Good,Indexed Order Item by PK,0.08,0.08,1.0,1,1,True (Identical Query + Index),None (Already Optimal),No Change,calibrated_simulation
+19,Good,Sargable Order Range With Limit,0.45,0.45,1.0,50,50,True (Identical Query + Index),None (Already Optimal),No Change,calibrated_simulation
+20,Good,Aggregated Order Total for Single Customer,0.45,0.45,1.0,50,50,True (Identical Query + Index),None (Already Optimal),No Change,calibrated_simulation

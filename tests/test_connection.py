@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from db.connection import DBConfig, build_engine, close_engine, test_connection as run_test_connection
+from db.connection import DBConfig, close_engine
+from db.connection import test_connection as run_test_connection
 
 
 def test_db_config_defaults():
@@ -136,6 +137,7 @@ def test_live_db_connection_optional():
         pytest.skip("TEST_DB_URL not set; skipping live DB integration test.")
 
     import sqlalchemy
+
     engine = sqlalchemy.create_engine(test_db_url)
     with engine.connect() as conn:
         res = conn.execute(sqlalchemy.text("SELECT 1")).scalar()

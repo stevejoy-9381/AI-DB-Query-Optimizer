@@ -19,9 +19,7 @@ class HavingAsWhereDetector(BaseDetector):
     score_delta = -5
     label = "HAVING clause filtering non-aggregates"
 
-    AGGREGATE_FUNCS = (
-        exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max, exp.Stddev, exp.Variance
-    )
+    AGGREGATE_FUNCS = (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max, exp.Stddev, exp.Variance)
 
     def detect(
         self,
@@ -43,22 +41,24 @@ class HavingAsWhereDetector(BaseDetector):
             if isinstance(cond, (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE)):
                 has_agg = bool(cond.find(*self.AGGREGATE_FUNCS))
                 if not has_agg:
-                    findings.append(Finding(
-                        code=self.code,
-                        severity=self.severity,
-                        score_delta=self.score_delta,
-                        message=(
-                            "HAVING clause contains a filter on non-aggregated columns. "
-                            "Filtering in HAVING forces MySQL to group all rows before filtering. "
-                            "Moving the condition to WHERE reduces rows before grouping."
-                        ),
-                        fix_example=(
-                            "-- Before (Filters after expensive aggregation)\n"
-                            "SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING customer_id > 100;\n\n"
-                            "-- After (Pre-filters rows before grouping)\n"
-                            "SELECT customer_id, COUNT(*) FROM orders WHERE customer_id > 100 GROUP BY customer_id;"
-                        ),
-                    ))
+                    findings.append(
+                        Finding(
+                            code=self.code,
+                            severity=self.severity,
+                            score_delta=self.score_delta,
+                            message=(
+                                "HAVING clause contains a filter on non-aggregated columns. "
+                                "Filtering in HAVING forces MySQL to group all rows before filtering. "
+                                "Moving the condition to WHERE reduces rows before grouping."
+                            ),
+                            fix_example=(
+                                "-- Before (Filters after expensive aggregation)\n"
+                                "SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING customer_id > 100;\n\n"
+                                "-- After (Pre-filters rows before grouping)\n"
+                                "SELECT customer_id, COUNT(*) FROM orders WHERE customer_id > 100 GROUP BY customer_id;"
+                            ),
+                        )
+                    )
                     break
 
         return findings

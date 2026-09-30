@@ -6,7 +6,6 @@ loads cleanly, executes query analysis end-to-end, and displays performance scor
 
 from __future__ import annotations
 
-import pytest
 from streamlit.testing.v1 import AppTest
 
 

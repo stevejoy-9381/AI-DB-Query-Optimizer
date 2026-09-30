@@ -145,10 +145,12 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
         func_name = getattr(func, "key", str(func)).upper()
         partition_by = w.args.get("partition_by")
         has_partition = bool(partition_by)
-        features.window_functions.append({
-            "function": func_name,
-            "has_partition": has_partition,
-        })
+        features.window_functions.append(
+            {
+                "function": func_name,
+                "has_partition": has_partition,
+            }
+        )
 
     # 3. Tables & Aliases
     tables_found: list[str] = []
@@ -203,14 +205,16 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
             if isinstance(on_cond.right, exp.Column):
                 right_col = on_cond.right.name
 
-        features.joins.append(JoinInfo(
-            join_type=join_type,
-            table=join_tbl,
-            alias=join_alias,
-            on_condition=on_cond.sql(dialect=dialect) if on_cond else None,
-            left_column=left_col,
-            right_column=right_col,
-        ))
+        features.joins.append(
+            JoinInfo(
+                join_type=join_type,
+                table=join_tbl,
+                alias=join_alias,
+                on_condition=on_cond.sql(dialect=dialect) if on_cond else None,
+                left_column=left_col,
+                right_column=right_col,
+            )
+        )
 
     # 6. WHERE Clause & Predicates
     where_clause = ast.args.get("where") or ast.find(exp.Where)
@@ -222,13 +226,19 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
         for like_node in where_clause.find_all(exp.Like):
             col_node = like_node.find(exp.Column)
             col_name = col_node.name if col_node else str(like_node.this)
-            expr_val = like_node.expression.this if hasattr(like_node.expression, "this") else str(like_node.expression)
+            expr_val = (
+                like_node.expression.this
+                if hasattr(like_node.expression, "this")
+                else str(like_node.expression)
+            )
             pattern_str = str(expr_val).strip("'\"")
             if pattern_str.startswith("%") or pattern_str.startswith("_"):
                 features.wildcard_likes.append(col_name)
 
         # Detect comparison predicates and function wrapping
-        for comp_node in where_clause.find_all(exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.In):
+        for comp_node in where_clause.find_all(
+            exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.In
+        ):
             left = comp_node.left if hasattr(comp_node, "left") else comp_node.this
             is_func = False
             func_name = None
@@ -248,13 +258,15 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
 
             if col_name:
                 filter_cols.add(col_name.lower())
-                features.where_predicates.append(PredicateInfo(
-                    column=col_name,
-                    operator=comp_node.key.upper(),
-                    is_function_wrapped=is_func,
-                    function_name=func_name,
-                    table=table_name,
-                ))
+                features.where_predicates.append(
+                    PredicateInfo(
+                        column=col_name,
+                        operator=comp_node.key.upper(),
+                        is_function_wrapped=is_func,
+                        function_name=func_name,
+                        table=table_name,
+                    )
+                )
 
     features.filter_columns = sorted(list(filter_cols))
 
@@ -297,11 +309,13 @@ def extract_query_features(sql: str, dialect: str = "mysql") -> QueryFeatures:
             # Check correlation (references tables from outer query)
             sub_cols = [c.table for c in subquery.find_all(exp.Column) if c.table]
             correlated = any(tbl in outer_tables for tbl in sub_cols)
-            features.subqueries.append(SubqueryInfo(
-                subquery_type="SUBQUERY",
-                is_correlated=correlated,
-                sql=sub_sql,
-            ))
+            features.subqueries.append(
+                SubqueryInfo(
+                    subquery_type="SUBQUERY",
+                    is_correlated=correlated,
+                    sql=sub_sql,
+                )
+            )
 
     # 11. Aggregates (COUNT, SUM, AVG, MAX, MIN)
     for func in ast.find_all(exp.Count, exp.Sum, exp.Avg, exp.Max, exp.Min):

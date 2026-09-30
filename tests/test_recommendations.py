@@ -11,7 +11,9 @@ Verifies:
 """
 
 import re
+
 import pytest
+
 from analyzer import analyze_query
 from config import Dialect, set_dialect
 from recommendations import generate_index_recommendations
@@ -28,6 +30,7 @@ def ensure_mysql():
 # ---------------------------------------------------------------------------
 # Test Cases (10+ Diverse Query Scenarios)
 # ---------------------------------------------------------------------------
+
 
 def test_query_1_single_column_equality():
     """Query 1: Simple single-column equality predicate."""
@@ -149,7 +152,9 @@ def test_query_9_long_identifiers_bounded_to_64_chars():
     for rec in recs:
         idx_name = rec["index_name"]
         assert len(idx_name) <= 64, f"Index name '{idx_name}' exceeds 64 chars ({len(idx_name)})"
-        assert re.match(r"^[a-z0-9_]+$", idx_name), f"Invalid characters in index name: '{idx_name}'"
+        assert re.match(r"^[a-z0-9_]+$", idx_name), (
+            f"Invalid characters in index name: '{idx_name}'"
+        )
 
 
 def test_query_10_no_if_not_exists_and_has_verification_comment():
@@ -210,8 +215,7 @@ def test_query_13_composite_equality_range_sort_ordering():
 def test_query_14_composite_index_capped_at_four_columns():
     """Query 14: Composite candidate with >4 columns is capped at 4 with a warning."""
     query = (
-        "SELECT id FROM events "
-        "WHERE c1 = '1' AND c2 = '2' AND c3 = '3' AND c4 = '4' AND c5 > '5';"
+        "SELECT id FROM events WHERE c1 = '1' AND c2 = '2' AND c3 = '3' AND c4 = '4' AND c5 > '5';"
     )
     analysis = analyze_query(query)
     recs = generate_index_recommendations(query, analysis)
@@ -229,7 +233,7 @@ def test_query_14_composite_index_capped_at_four_columns():
 
 def test_query_15_size_estimation_and_trade_offs_with_schema():
     """Query 15: Index size estimation and trade-offs notes."""
-    from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
+    from db.schema import ColumnInfo, SchemaInfo, TableInfo
     from recommendations import estimate_index_size_bytes
 
     schema = SchemaInfo(database="testdb")
@@ -267,7 +271,9 @@ def test_query_16_detect_duplicate_and_prefix_redundant_indexes():
     tbl.columns["status"] = ColumnInfo(name="status", data_type="varchar(20)")
 
     # Primary key
-    tbl.indexes["primary"] = IndexInfo(name="PRIMARY", table_name="orders", columns=["id"], is_primary=True)
+    tbl.indexes["primary"] = IndexInfo(
+        name="PRIMARY", table_name="orders", columns=["id"], is_primary=True
+    )
     # Composite index
     tbl.indexes["idx_cust_status"] = IndexInfo(
         name="idx_cust_status", table_name="orders", columns=["customer_id", "status"]
@@ -332,4 +338,3 @@ def test_query_18_recommendations_ranked_by_expected_benefit():
     # Verify sorted descending by benefit_score
     scores = [r["benefit_score"] for r in recs]
     assert scores == sorted(scores, reverse=True)
-

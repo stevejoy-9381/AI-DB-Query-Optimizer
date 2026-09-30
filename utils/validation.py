@@ -41,7 +41,10 @@ def validate_sql_input(
 
     # 2. Max length check
     if len(cleaned) > max_length:
-        return False, f"Query exceeds maximum permitted length ({len(cleaned):,} / {max_length:,} characters)."
+        return (
+            False,
+            f"Query exceeds maximum permitted length ({len(cleaned):,} / {max_length:,} characters).",
+        )
 
     # 3. Comments-only check
     no_comments = re.sub(r"--[^\n]*", "", cleaned)
@@ -63,7 +66,10 @@ def validate_sql_input(
 
     valid_stmts = [s for s in parsed_statements if s is not None]
     if len(valid_stmts) > 1:
-        return False, "Multiple SQL statements detected. Please submit a single query at a time for analysis."
+        return (
+            False,
+            "Multiple SQL statements detected. Please submit a single query at a time for analysis.",
+        )
     elif len(valid_stmts) == 0:
         return False, "Query contains no executable statements."
 

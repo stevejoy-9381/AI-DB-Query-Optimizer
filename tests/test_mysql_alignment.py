@@ -4,6 +4,7 @@ Unit tests verifying MySQL 8.x alignment and dialect abstraction.
 """
 
 import pytest
+
 from analyzer import analyze_query
 from config import Dialect, get_current_dialect, get_dialect_config, is_mysql, set_dialect
 from execution_plan import flatten_plan, generate_execution_plan, get_all_nodes, plan_summary
@@ -24,6 +25,7 @@ def ensure_mysql_dialect():
 # Config & Dialect Tests
 # ---------------------------------------------------------------------------
 
+
 def test_config_default_dialect_is_mysql():
     assert get_current_dialect() == Dialect.MYSQL
     assert is_mysql() is True
@@ -37,7 +39,9 @@ def test_config_default_dialect_is_mysql():
 
 def test_config_covering_index_format_mysql():
     cfg = get_dialect_config(Dialect.MYSQL)
-    ddl = cfg.format_covering_index("orders", "idx_orders_covering", "customer_id", ["total", "status"])
+    ddl = cfg.format_covering_index(
+        "orders", "idx_orders_covering", "customer_id", ["total", "status"]
+    )
     assert "INCLUDE" not in ddl
     assert "ON orders(customer_id, total, status);" in ddl
 
@@ -68,6 +72,7 @@ def test_config_invalid_dialect_raises():
 # ---------------------------------------------------------------------------
 # Index Recommendations Tests (MySQL 8.x)
 # ---------------------------------------------------------------------------
+
 
 def test_recommendations_no_postgres_terms():
     query = "SELECT * FROM orders WHERE customer_id = 10 AND status = 'pending';"
@@ -106,6 +111,7 @@ def test_best_practices_no_postgres_terms():
 # ---------------------------------------------------------------------------
 # Simulated Execution Plan Tests (MySQL 8.x EXPLAIN)
 # ---------------------------------------------------------------------------
+
 
 def test_execution_plan_unindexed_query_uses_all():
     query = "SELECT * FROM orders;"
@@ -153,7 +159,9 @@ def test_execution_plan_group_by_uses_temporary():
 
 
 def test_flatten_plan_structure():
-    query = "SELECT * FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.status = 'active';"
+    query = (
+        "SELECT * FROM customers c JOIN orders o ON c.id = o.customer_id WHERE c.status = 'active';"
+    )
     analysis = analyze_query(query)
     root = generate_execution_plan(query, analysis)
     flattened = flatten_plan(root)
@@ -182,7 +190,7 @@ def test_plan_summary_keys_backward_compatible():
     assert "access_type" in summary
     assert "has_index_scan" in summary
     assert "has_all_scan" in summary
-    assert "has_seq_scan" in summary   # preserved backward-compatibility alias
+    assert "has_seq_scan" in summary  # preserved backward-compatibility alias
     assert "cost_category" in summary
     assert "estimated_rows" in summary
     assert "plan_cost" in summary
@@ -191,6 +199,7 @@ def test_plan_summary_keys_backward_compatible():
 # ---------------------------------------------------------------------------
 # Simulator Tests
 # ---------------------------------------------------------------------------
+
 
 def test_simulator_labels_numbers_as_estimated():
     query = "SELECT * FROM orders WHERE customer_id = 10;"

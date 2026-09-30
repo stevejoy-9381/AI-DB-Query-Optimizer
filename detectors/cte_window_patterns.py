@@ -28,22 +28,24 @@ class CteMultiplyReferencedDetector(BaseDetector):
         findings = []
         for cte_name, count in features.cte_references.items():
             if count >= 2:
-                findings.append(Finding(
-                    code=self.code,
-                    severity=self.severity,
-                    score_delta=self.score_delta,
-                    message=(
-                        f"Common Table Expression (CTE) `{cte_name}` is referenced {count} times in the outer query. "
-                        "In MySQL 8.0, CTEs without materialization may be re-executed multiple times. "
-                        "Consider evaluating into a temporary table if execution time is significant."
-                    ),
-                    fix_example=(
-                        f"-- Note: In MySQL 8.0, CTEs are inlined unless recursive or materialized.\n"
-                        f"-- For expensive computations used repeatedly, consider:\n"
-                        f"CREATE TEMPORARY TABLE temp_{cte_name} AS SELECT ...;"
-                    ),
-                    category="architecture",
-                ))
+                findings.append(
+                    Finding(
+                        code=self.code,
+                        severity=self.severity,
+                        score_delta=self.score_delta,
+                        message=(
+                            f"Common Table Expression (CTE) `{cte_name}` is referenced {count} times in the outer query. "
+                            "In MySQL 8.0, CTEs without materialization may be re-executed multiple times. "
+                            "Consider evaluating into a temporary table if execution time is significant."
+                        ),
+                        fix_example=(
+                            f"-- Note: In MySQL 8.0, CTEs are inlined unless recursive or materialized.\n"
+                            f"-- For expensive computations used repeatedly, consider:\n"
+                            f"CREATE TEMPORARY TABLE temp_{cte_name} AS SELECT ...;"
+                        ),
+                        category="architecture",
+                    )
+                )
         return findings
 
 
@@ -64,22 +66,24 @@ class WindowWithoutPartitionDetector(BaseDetector):
             for win in features.window_functions:
                 if not win.get("has_partition"):
                     func_name = win.get("function", "WINDOW")
-                    findings.append(Finding(
-                        code=self.code,
-                        severity=self.severity,
-                        score_delta=self.score_delta,
-                        message=(
-                            f"Window function `{func_name}` lacks a PARTITION BY clause. "
-                            "It evaluates across the entire result set in a single window frame, "
-                            "forcing a global filesort and memory buffering."
-                        ),
-                        fix_example=(
-                            f"-- Before (All rows sorted globally)\n"
-                            f"SELECT id, {func_name}() OVER (ORDER BY created_at) FROM table_name;\n\n"
-                            f"-- After (Partitioned by entity/tenant)\n"
-                            f"SELECT id, {func_name}() OVER (PARTITION BY tenant_id ORDER BY created_at) FROM table_name;"
-                        ),
-                        category="performance",
-                    ))
+                    findings.append(
+                        Finding(
+                            code=self.code,
+                            severity=self.severity,
+                            score_delta=self.score_delta,
+                            message=(
+                                f"Window function `{func_name}` lacks a PARTITION BY clause. "
+                                "It evaluates across the entire result set in a single window frame, "
+                                "forcing a global filesort and memory buffering."
+                            ),
+                            fix_example=(
+                                f"-- Before (All rows sorted globally)\n"
+                                f"SELECT id, {func_name}() OVER (ORDER BY created_at) FROM table_name;\n\n"
+                                f"-- After (Partitioned by entity/tenant)\n"
+                                f"SELECT id, {func_name}() OVER (PARTITION BY tenant_id ORDER BY created_at) FROM table_name;"
+                            ),
+                            category="performance",
+                        )
+                    )
                     break
         return findings

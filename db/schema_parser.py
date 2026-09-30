@@ -156,7 +156,9 @@ def parse_ddl_schema(
 
                     # Table Constraint: KEY / INDEX (col1, col2)
                     elif isinstance(item, exp.IndexColumnConstraint):
-                        idx_name = item.this.name if hasattr(item.this, "name") else f"idx_{lower_tbl}"
+                        idx_name = (
+                            item.this.name if hasattr(item.this, "name") else f"idx_{lower_tbl}"
+                        )
                         idx_cols = [_extract_column_name(c) for c in item.expressions]
                         table_info.indexes[idx_name.lower()] = IndexInfo(
                             name=idx_name,

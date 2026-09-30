@@ -8,15 +8,14 @@ Tests for query rewrite semantic validation and safety levels:
 """
 
 from unittest.mock import MagicMock
-import pytest
 
-from rewrite_validation import (
-    validate_rewrite_static,
-    validate_rewrite_data,
-    EquivalenceLevel,
-)
-from rewrite_engine import rewrite_query
 from analyzer import analyze_query
+from rewrite_engine import rewrite_query
+from rewrite_validation import (
+    EquivalenceLevel,
+    validate_rewrite_data,
+    validate_rewrite_static,
+)
 
 
 def test_static_validation_verified_equivalent():

@@ -6,19 +6,23 @@ schema-aware table multipliers, indexed-filter bonuses, and
 """
 
 import csv
-import pytest
 from pathlib import Path
 
+import pytest
+
 from analyzer import analyze_query
+from db.schema import ColumnInfo, IndexInfo, SchemaInfo, TableInfo
 from scoring import compute_score, simulate_optimized_score
 from scoring_rules import get_table_size_multiplier
-from db.schema import SchemaInfo, TableInfo, ColumnInfo, IndexInfo
 
 
 @pytest.fixture
 def tiered_schemas():
     """Returns schemas with small, medium, and large table sizes."""
-    cols = [ColumnInfo("id", "int", False, "PRI", None), ColumnInfo("status", "varchar(20)", False, "", None)]
+    cols = [
+        ColumnInfo("id", "int", False, "PRI", None),
+        ColumnInfo("status", "varchar(20)", False, "", None),
+    ]
     idx_pk = [IndexInfo("PRIMARY", "orders", ["id"], True, True)]
     idx_status = [
         IndexInfo("PRIMARY", "orders", ["id"], True, True),

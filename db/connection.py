@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote_plus
 
-import sqlalchemy
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, ProgrammingError, SQLAlchemyError
@@ -30,6 +29,7 @@ class DBConfig:
     @classmethod
     def from_env(cls) -> DBConfig:
         import os
+
         return cls(
             host=os.getenv("MYSQL_HOST", "localhost"),
             port=int(os.getenv("MYSQL_PORT", "3306")),
@@ -54,7 +54,7 @@ class DBConfig:
         safe_user = quote_plus(self.user)
         safe_password = quote_plus(self.password)
         safe_db = quote_plus(self.database) if self.database else ""
-        
+
         # When database is empty, connect without selecting database (e.g. for server ping)
         db_path = f"/{safe_db}" if safe_db else ""
         return f"mysql+pymysql://{safe_user}:{safe_password}@{self.host}:{self.port}{db_path}"
@@ -75,7 +75,13 @@ def build_engine(config: DBConfig) -> Engine:
         "read_timeout": config.read_timeout,
         "charset": "utf8mb4",
     }
-    logger.info("Building SQLAlchemy engine for %s@%s:%s/%s", config.user, config.host, config.port, config.database)
+    logger.info(
+        "Building SQLAlchemy engine for %s@%s:%s/%s",
+        config.user,
+        config.host,
+        config.port,
+        config.database,
+    )
     return create_engine(
         url,
         pool_pre_ping=True,
@@ -103,7 +109,10 @@ def test_connection(config: DBConfig) -> tuple[bool, str]:
             result = conn.execute(text("SELECT 1 AS ping"))
             row = result.fetchone()
             if row and row[0] == 1:
-                return True, f"Successfully connected to MySQL database '{config.database or 'server'}'."
+                return (
+                    True,
+                    f"Successfully connected to MySQL database '{config.database or 'server'}'.",
+                )
             return False, "Connected but ping query returned unexpected result."
 
     except OperationalError as err:
@@ -111,11 +120,24 @@ def test_connection(config: DBConfig) -> tuple[bool, str]:
         orig_code = getattr(err.orig, "args", [None])[0] if hasattr(err, "orig") else None
 
         if orig_code == 1045 or "access denied" in err_msg:
-            return False, f"Access denied for user '{config.user}'. Check your username and password."
+            return (
+                False,
+                f"Access denied for user '{config.user}'. Check your username and password.",
+            )
         if orig_code == 1049 or "unknown database" in err_msg:
-            return False, f"Unknown database '{config.database}'. Please verify the database exists."
-        if orig_code == 2003 or "can't connect to mysql server" in err_msg or "connection refused" in err_msg:
-            return False, f"Host unreachable: cannot connect to {config.host}:{config.port}. Verify MySQL is running and network/firewall allows access."
+            return (
+                False,
+                f"Unknown database '{config.database}'. Please verify the database exists.",
+            )
+        if (
+            orig_code == 2003
+            or "can't connect to mysql server" in err_msg
+            or "connection refused" in err_msg
+        ):
+            return (
+                False,
+                f"Host unreachable: cannot connect to {config.host}:{config.port}. Verify MySQL is running and network/firewall allows access.",
+            )
         if "timed out" in err_msg or "timeout" in err_msg:
             return False, f"Connection timed out after {config.connect_timeout} seconds."
 

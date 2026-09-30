@@ -63,9 +63,7 @@ class HistoryStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_history_created ON query_history(created_at DESC);"
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_history_score ON query_history(score);"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_history_score ON query_history(score);")
             conn.commit()
 
     def add(
@@ -83,6 +81,16 @@ class HistoryStore:
         """Insert a query analysis record into history."""
         report_json = json.dumps(report_dict)
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cost_val = 0.0
+        if isinstance(cost, (int, float)):
+            cost_val = float(cost)
+        elif isinstance(cost, str):
+            try:
+                cost_val = float(cost)
+            except ValueError:
+                cost_map = {"LOW": 1.0, "MEDIUM": 5.0, "HIGH": 15.0, "CRITICAL": 50.0}
+                cost_val = cost_map.get(cost.strip().upper(), 0.0)
+
         with self._connection() as conn:
             cursor = conn.execute(
                 """
@@ -97,7 +105,7 @@ class HistoryStore:
                     statement_type,
                     int(score),
                     complexity,
-                    float(cost),
+                    cost_val,
                     dialect,
                     mode,
                     source_badges,
@@ -110,9 +118,7 @@ class HistoryStore:
     def get(self, record_id: int) -> Optional[dict[str, Any]]:
         """Retrieve a single history record with parsed JSON report."""
         with self._connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM query_history WHERE id = ?;", (record_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM query_history WHERE id = ?;", (record_id,)).fetchone()
             if not row:
                 return None
             res = dict(row)
@@ -166,9 +172,7 @@ class HistoryStore:
     def delete(self, record_id: int) -> bool:
         """Delete a record by ID."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM query_history WHERE id = ?;", (record_id,)
-            )
+            cursor = conn.execute("DELETE FROM query_history WHERE id = ?;", (record_id,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -186,9 +190,33 @@ class HistoryStore:
             ).fetchall()
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(["ID", "Timestamp", "Statement", "Score", "Complexity", "Cost", "Dialect", "Mode", "Query"])
+            writer.writerow(
+                [
+                    "ID",
+                    "Timestamp",
+                    "Statement",
+                    "Score",
+                    "Complexity",
+                    "Cost",
+                    "Dialect",
+                    "Mode",
+                    "Query",
+                ]
+            )
             for r in rows:
-                writer.writerow([r["id"], r["created_at"], r["statement_type"], r["score"], r["complexity"], r["cost"], r["dialect"], r["mode"], r["query"]])
+                writer.writerow(
+                    [
+                        r["id"],
+                        r["created_at"],
+                        r["statement_type"],
+                        r["score"],
+                        r["complexity"],
+                        r["cost"],
+                        r["dialect"],
+                        r["mode"],
+                        r["query"],
+                    ]
+                )
             return output.getvalue()
 
     def export_json(self) -> str:

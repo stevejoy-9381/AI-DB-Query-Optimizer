@@ -2,9 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from db.explain import (
     parse_mysql_explain_json,
